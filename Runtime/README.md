@@ -10,25 +10,26 @@ Supported: 2D, sound-speed inversion, fixed zero attenuation.
 
 ## Entry points
 
-| Operation | MATLAB | Batch MAT variables |
+| Operation | MATLAB | External input schema |
 |---|---|---|
-| Generate RF | `rf=wust_simulate(model,cfg)` | `model` |
-| RF → frequencies | `obs=wust_prepare(rf,cfg)` | `rf, prepare_config` |
-| FWI | `result=wust_reconstruct(obs,initial,cfg)` | `obs, initial_mps, update_mask` |
+| Generate RF | `rf=wust_simulate(model,cfg)` | `wust.simulation_input` |
+| RF → frequencies | `obs=wust_prepare(rf,cfg)` | `wust.rf` |
+| Frequency ingestion | `obs=wust_ingest_frequency(input)` | `wust.frequency_input` |
+| FWI | `result=wust_reconstruct(obs,initial,cfg)` | `wust.measurements` + `wust.initial_model` |
 | Loss/gradient | `[loss,g,state]=wust_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
 
-Python (standard library only):
+Python (static discovery: standard library; batch arrays: NumPy/h5py):
 ```sh
-python Runtime/python/wust_runtime.py /absolute/request.json --matlab matlab
+python Runtime/python/wust_runtime.py describe --json
+python Runtime/python/wust_runtime.py run /absolute/request.json --matlab matlab --timeout-s 300
 ```
-JSON: `schema="wfi.request.v1"`, `operation="simulate"|"prepare"|"reconstruct"`,
-absolute `input_mat/output_mat`, and `config`. Optional `kwave_toolbox_path`.
-MAT output contains `result`: pass it as `rf` or `obs` to the next step.
-Direct MATLAB/Engine calls avoid startup overhead. Logs/errors propagate; existing
-outputs are refused; no best-GT checkpoint selection.
+The [runtime contract](../docs/RUNTIME_API.md) defines JSON manifests and explicit
+HDF5 real/imag arrays, source identity, input snapshots and atomic finalization.
+The launcher supervises a bounded MATLAB process group. Logs/errors propagate;
+existing outputs are refused; no best-GT checkpoint selection.
 
-Executable complete example: **tests/smoke_pipeline.m**, which constructs every
-required configuration field and writes an adapter request.
+Executable examples: `tests/smoke_pipeline.m` for direct MATLAB simulation and
+`tests/integration_runtime.py` for the actual new external launcher.
 
 ## Install and verify
 
@@ -96,5 +97,5 @@ remain cached for the linearized step. No OOM fallback, GPU scheduler or automat
 - [Stage 4A1 validation](../docs/STAGE4A1_VALIDATION.md)
 
 Pin the runtime commit SHA, not a moving branch. Runtime/VERSION is the version
-authority; serialized schema identifiers remain unchanged during Stage 4A1.
-BenchLab integration and the new external protocol are deferred to later stages.
+authority. New schema versions are separate integers. BenchLab integration is
+deferred to Stage 4B; the old MAT request parser is not maintained in parallel.

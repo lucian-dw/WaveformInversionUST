@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "config": {
+      "type": "object"
+    },
+    "initial_manifest": {
+      "type": "string"
+    },
+    "input_manifest": {
+      "type": "string"
+    },
+    "operation": {
+      "enum": [
+        "ingest_frequency",
+        "reconstruct",
+        "prepare",
+        "simulate"
+      ]
+    },
+    "output_manifest": {
+      "type": "string"
+    },
+    "planned_schedule_length": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schedule": {
+      "items": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "schema": {
+      "const": "wust.request"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "operation",
+    "input_manifest",
+    "output_manifest",
+    "config"
+  ],
+  "type": "object"
+}

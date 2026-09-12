@@ -1,4 +1,7 @@
-# Runtime contracts v1
+# Numerical contracts
+
+For the external JSON/HDF5 API, schemas and admission rules, see
+[Runtime API](RUNTIME_API.md). This document describes the underlying numerical model.
 
 ## Ownership and axes
 
@@ -11,7 +14,8 @@ splits and metrics. Supply the final physical computational grid. There is no
 - tx_index/rx_index: MATLAB 1-based column-major linear indices.
 - RF pressure: [T,RX,TX]. time_s includes the source pulse offset.
 - Complex Y and boolean mask: [TX,RX,F].
-- frequencies_hz: increasing positive Hz, strictly below saved Nyquist.
+- frequencies_hz: increasing positive Hz. RF preparation checks saved Nyquist;
+  direct frequency ingestion does not invent an unavailable time-sampling rate.
 - DTFT: sum RF(t)*exp(-2*pi*i*f*t)*dt. Helmholtz sign is -1.
 - Schedule: 1-based frequency indices, repeated for each desired update.
 - Snapped TX/RX coordinates are recorded. Merged elements fail.
@@ -70,8 +74,8 @@ do not silently fall back. Caller controls GPU visibility/selection.
 
 ## Output integrity
 
-Batch results are saved via temporary MAT then renamed after success.
+Batch results use explicit HDF5 arrays and a JSON success manifest published last.
 Use unique output paths for parallel calls; no distributed lock is supplied.
 Requests are trusted local configuration, not a sandbox for untrusted inputs.
-Outputs record config, timings, MATLAB and runtime versions.
-Caller should retain Git pin and hashes of input artifacts.
+Outputs record config, timings, MATLAB/runtime/source identities and input hashes.
+Caller must still retain an approved Git pin and scientific acquisition provenance.

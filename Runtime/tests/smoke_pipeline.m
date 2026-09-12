@@ -10,6 +10,7 @@ cfg=struct('backend','matlab-serial','pml_size',8,'density_kg_m3',1000, ...
 rf=wust_simulate(model,cfg);
 prepare=struct('x_m',x,'y_m',y,'frequencies_hz',[.1e6,.125e6], ...
     'c_geom_mps',1500,'window','none','phase_correction','none','mask',~eye(3));
+prepare.data_units='Pa*s';prepare.measurement_provenance='self_simulated';
 obs=wust_prepare(rf,prepare);
 assert(isequal(size(obs.Y),[3,3,2]));
 assert(isequal(obs.tx_index,model.tx_index));
@@ -21,11 +22,6 @@ fwi=struct('backend','cpu','schedule',[1,2],'bounds_mps',[1300,1800],'max_update
 result=wust_reconstruct(obs,1500*ones(size(X)),fwi);assert(all(isfinite(result.c_mps(:))));
 out=fullfile(root,'tests','artifacts');if ~exist(out,'dir'),mkdir(out);end
 save(fullfile(out,'smoke.mat'),'rf','obs','result','-v7.3');
-% Exercise the thin adapter's MAT contract separately from direct MATLAB calls.
-initial_mps=1500*ones(size(X));update_mask=mask;
-save(fullfile(out,'adapter_input.mat'),'obs','initial_mps','update_mask');
-req=struct('schema','wfi.request.v1','operation','reconstruct','input_mat', ...
-    fullfile(out,'adapter_input.mat'),'output_mat',fullfile(out,'adapter_output.mat'),'config',rmfield(fwi,'update_mask'));
-fid=fopen(fullfile(out,'request.json'),'w');fprintf(fid,'%s',jsonencode(req));fclose(fid);
+% The JSON/HDF5 launcher is exercised by integration_runtime.py.
 fprintf('End-to-end k-Wave serial -> RF FIR -> DTFT -> FWI smoke passed\n');
 end

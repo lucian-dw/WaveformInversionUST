@@ -15,6 +15,7 @@ cfg=struct('backend','native128','pml_size',10,'density_kg_m3',1000, ...
 rf=wust_simulate(model,cfg);assert(all(isfinite(rf.pressure(:))));
 prep=struct('frequencies_hz',(.3:.025:1)*1e6,'x_m',x,'y_m',y,'c_geom_mps',1500, ...
     'window','none','phase_correction','none','mask',~eye(128));
+prep.data_units='Pa*s';prep.measurement_provenance='self_simulated';
 timer=tic;obs=wust_prepare(rf,prep);prepare_seconds=toc(timer);
 timer=tic;save(fullfile(outputDir,'rf.mat'),'rf','-v7.3');save_seconds=toc(timer);
 save(fullfile(outputDir,'observations.mat'),'obs','-v7.3');

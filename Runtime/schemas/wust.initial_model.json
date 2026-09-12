@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "arrays": {
+      "additionalProperties": false,
+      "properties": {
+        "initial_mps": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "y,x"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        },
+        "update_mask": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "y,x"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "initial_mps",
+        "update_mask"
+      ],
+      "type": "object"
+    },
+    "arrays_file": {
+      "pattern": "^[^/\\\\]+$",
+      "type": "string"
+    },
+    "arrays_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "schema": {
+      "const": "wust.initial_model"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "metadata",
+    "arrays_file",
+    "arrays_sha256",
+    "arrays"
+  ],
+  "type": "object"
+}

@@ -2,12 +2,13 @@ function result=wust_reconstruct(obs,initial,cfg)
 % Frequency-continuation FWI. Block-LU is the linear solver, not the algorithm.
 % Upstream-compatible clipped PR/FR NCG + linearized step in slowness.
 % Fork fixes: exact mass-stencil derivative, explicit contracts, costs and mask.
+[obs,cfg]=wust_validate_reconstruction(obs,initial,cfg);
 required={'backend','schedule','bounds_mps','max_update_mps','step_damping', ...
     'source_batch_size','pml_strength','pml_m','stencil_bounds','wavenumber', ...
     'filter_cutoff','filter_order','update_mask'};
 for j=1:numel(required),assert(isfield(cfg,required{j}),['Missing ' required{j}]);end
 wust_setup(cfg.backend);
-assert(strcmp(obs.schema,'wfi.measurements.v1') && obs.fourier_sign==-1,'Observation schema/sign mismatch');
+wust_assert_schema(obs,'wust.measurements');
 assert(all(isfinite(cfg.schedule(:))) && all(cfg.schedule(:)==round(cfg.schedule(:))) ...
     && all(cfg.schedule(:)>=1 & cfg.schedule(:)<=numel(obs.frequencies_hz)),'Invalid frequency-index schedule');
 assert(numel(cfg.bounds_mps)==2 && cfg.bounds_mps(1)>0 && diff(cfg.bounds_mps)>0,'Invalid bounds');
@@ -41,9 +42,14 @@ for step=1:n
     end
     if wustUseGPU,wait(gpuDevice);end
     linearSeconds=toc(linearTimer);alpha=0;
+    assert(isfinite(denom)&&denom>=0&&all(isfinite(direction(:))), ...
+        'WUST:NumericalFailure','Nonfinite direction/curvature');
+    assert(denom>0||all(direction(:)==0), 'WUST:NumericalFailure','Zero curvature with nonzero update direction');
     if denom>0,alpha=max(0,-sum(rawg(:).*direction(:))/denom);end
     candidate=1./(1./c+cfg.step_damping*alpha*double(direction));
-    candidate(~isfinite(candidate)|candidate<=0)=c(~isfinite(candidate)|candidate<=0);
+    assert(all(isfinite(candidate(:))&candidate(:)>0), 'WUST:NumericalFailure', ...
+        'Invalid candidate; refusing to silently replace it with the old model');
+    oldSlowness=1./c;
     delta=max(-cfg.max_update_mps,min(cfg.max_update_mps,candidate-c));
     candidate=max(cfg.bounds_mps(1),min(cfg.bounds_mps(2),c+delta));candidate(~mask)=c(~mask);c=candidate;
     history(:,:,step+1)=single(c);
@@ -54,12 +60,25 @@ for step=1:n
         'adjoint_seconds',state.adjoint_seconds,'linearized_seconds',linearSeconds, ...
         'fresh_factorizations',1,'forward_rhs',state.forward_rhs, ...
         'adjoint_rhs',state.adjoint_rhs,'linearized_rhs',numel(obs.tx_index));
+    record.relative_slowness_update=norm(1./c(mask)-oldSlowness(mask))/max(norm(oldSlowness(mask)),realmin);
+    record.stage_id=fi;record.loss_model_step=step-1;
     if isempty(records),records=record;else,records(step)=record;end %#ok<AGROW>
     fprintf('FWI %d/%d f=%.3f MHz residual(pre)=%.6g wall=%.3fs\n', ...
         step,n,obs.frequencies_hz(fi)/1e6,records(step).relative_residual_before_update,records(step).wall_seconds);
 end
-result=struct('schema','wfi.reconstruction.v1','c_mps',c,'history_mps',history, ...
+reason='schedule_complete';category='completion';
+if n==0,reason='zero_updates';category='budget';
+elseif n<cfg.planned_schedule_length,reason='caller_truncated_schedule';category='budget';end
+result=struct('schema','wust.reconstruction','schema_version',1,'c_mps',c,'history_mps',history, ...
     'records',records,'config',cfg,'wall_seconds',toc(allTimer), ...
     'selection','final (no target labels or best-GT selection)', ...
     'gradient_contract','exact discrete nine-point mass stencil');
+result.executed_schedule=cfg.schedule;result.completed_updates=n;
+result.completion=struct('category',category,'reason',reason,'converged',false);
+result.final_data_residual=[];
+result.update_semantics=struct('optimization_variable','slowness', ...
+    'update_variable','full_slowness','update_units','s/m','update_norm','l2', ...
+    'update_norm_scope','declared_update_mask', ...
+    'update_normalization','norm(s_new-s_old)/norm(s_old)', ...
+    'iteration_unit','frequency_schedule_update','update_rtol_enabled',false);
 end

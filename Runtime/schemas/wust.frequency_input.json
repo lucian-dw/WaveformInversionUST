@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "arrays": {
+      "additionalProperties": false,
+      "properties": {
+        "frequencies_hz": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "frequency"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        },
+        "mask": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "frequency,tx,rx",
+                "tx,rx,frequency",
+                "tx,rx"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        },
+        "pressure": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "frequency,tx,rx",
+                "tx,rx,frequency",
+                "time,rx,tx"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        },
+        "rx_xy_m": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "rx,xy"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        },
+        "tx_xy_m": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "real_dataset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "imag_dataset"
+                    ]
+                  }
+                ]
+              },
+              "required": [
+                "dataset"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "dataset"
+                ]
+              },
+              "required": [
+                "real_dataset",
+                "imag_dataset"
+              ]
+            }
+          ],
+          "properties": {
+            "axes": {
+              "enum": [
+                "tx,xy"
+              ]
+            },
+            "dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64",
+                "complex64",
+                "complex128",
+                "bool",
+                "uint8",
+                "int64"
+              ]
+            },
+            "imag_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "real_dataset": {
+              "pattern": "^/",
+              "type": "string"
+            },
+            "shape": {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "units": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "axes",
+            "shape",
+            "dtype",
+            "units"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "frequencies_hz",
+        "mask",
+        "pressure",
+        "rx_xy_m",
+        "tx_xy_m"
+      ],
+      "type": "object"
+    },
+    "arrays_file": {
+      "pattern": "^[^/\\\\]+$",
+      "type": "string"
+    },
+    "arrays_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "schema": {
+      "const": "wust.frequency_input"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "metadata",
+    "arrays_file",
+    "arrays_sha256",
+    "arrays"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,9 @@
+function wust_assert_schema(value, name)
+if isfield(value, 'schema') && startsWith(string(value.schema), 'wfi.')
+    error('WUST:IncompatibleRequest', ...
+        'Legacy wfi.*.v1 is not supported. Re-export explicit WUST JSON/HDF5 inputs; use a historical tag for MAT requests.');
+end
+assert(isfield(value, 'schema') && strcmp(value.schema, name) && ...
+    isfield(value, 'schema_version') && isequal(value.schema_version, 1), ...
+    'WUST:IncompatibleRequest', 'Expected %s with schema_version=1', name);
+end

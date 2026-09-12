@@ -125,7 +125,7 @@
       "source": "Runtime/docs/CONTRACTS.md",
       "destination": "docs/CONTRACTS.md",
       "original_sha256": "83e7180cb38f12c48c190252f4613f0ae97b11bd4cbf0dc19bbc03d0284a346e",
-      "byte_preserved": true
+      "byte_preserved": false
     },
     {
       "source": "Runtime/docs/PIPELINE_ZH.md",
@@ -203,19 +203,19 @@
       "source": "Runtime/native/install_launcher.py",
       "destination": "Runtime/native/install_launcher.py",
       "original_sha256": "d9f087a5e3150bfd9d8b337c6057b2667be2b348cc61604e28836feb33012f24",
-      "byte_preserved": true
+      "byte_preserved": false
     },
     {
       "source": "Runtime/native/run_native_source_batch.py",
       "destination": "Runtime/native/run_native_source_batch.py",
       "original_sha256": "58ba50f8177a9648e9a6f607b83f3621d0000b375ce7c9e9c209721e6854c182",
-      "byte_preserved": true
+      "byte_preserved": false
     },
     {
       "source": "Runtime/native/validate_native.py",
       "destination": "Runtime/native/validate_native.py",
       "original_sha256": "944c5f234c401b62ad4f8935c7ccf012c2f20ecb092319fe0ea81d47fc707ae9",
-      "byte_preserved": true
+      "byte_preserved": false
     },
     {
       "source": "Runtime/python/wfi_runtime.py",
