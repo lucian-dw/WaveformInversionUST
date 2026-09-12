@@ -5,11 +5,11 @@
 ```text
 benchlab：数据集、裁剪/缩放、物理坐标、split、评价合同
     ↓ 计算网格上的 SoS + 阵元索引 + 源波形
-wfi_simulate：2D k-Wave / native128 独立 TX 批处理
+wust_simulate：2D k-Wave / native128 独立 TX 批处理
     ↓ FIR 抗混叠、保留 RF [time, RX, TX] 与实际阵元坐标
-wfi_prepare：显式时间窗 / DTFT / 可选落点相位修正 / 显式 mask
+wust_prepare：显式时间窗 / DTFT / 可选落点相位修正 / 显式 mask
     ↓ 复数观测 [TX, RX, frequency]
-wfi_reconstruct：逐频 FWI、源幅相消元、伴随梯度、NCG
+wust_reconstruct：逐频 FWI、源幅相消元、伴随梯度、NCG
     ↓ Helmholtz 九点差分 + PML + CUDA Block-LU
 物理网格 SoS、更新历史、残差、真实成本 → benchlab 评价
 ```

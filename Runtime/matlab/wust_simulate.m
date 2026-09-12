@@ -1,4 +1,4 @@
-function rf=wfi_simulate(model,cfg)
+function rf=wust_simulate(model,cfg)
 % Physical input, no anatomical preprocessing. Matrix convention c(y,x).
 % k-Wave calls its first matrix axis x; we explicitly map it to physical y.
 % model: c_mps [Ny,Nx], x_m/y_m vectors, tx_index/rx_index MATLAB linear indices,
@@ -40,7 +40,7 @@ switch cfg.backend
         setenv('KWAVE_NATIVE_TX_INDICES_H5',strjoin(string(h5index.'),','));
         raw=kspaceFirstOrder2DG(kgrid,medium,source,sensor,common{:}, ...
             'BinaryPath',cfg.binary_path,'DeviceNum',cfg.device_num, ...
-            'DataPath',cfg.work_dir,'DataName',['wfi_' char(java.util.UUID.randomUUID())], ...
+            'DataPath',cfg.work_dir,'DataName',['wust_' char(java.util.UUID.randomUUID())], ...
             'DeleteData',false);
         assert(size(raw,1)==nr*nt,'Unexpected native receiver output size');
         raw=reshape(single(raw),nr,nt,[]);

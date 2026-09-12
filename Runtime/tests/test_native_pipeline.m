@@ -14,11 +14,11 @@ model=struct('c_mps',c,'x_m',x,'y_m',y,'tx_index',indices,'rx_index',indices, ..
 cfg=struct('backend','native128','pml_size',10,'density_kg_m3',1000, ...
     'sound_speed_ref_mps',1550,'downsample_factor',2,'time_offset_s',-4e-6, ...
     'work_dir',outputDir,'binary_path',binaryPath,'device_num',0);
-native=wfi_simulate(model,cfg);
+native=wust_simulate(model,cfg);
 selected=[1,2,17,33,65,81,97,128];
 save(fullfile(outputDir,'native_checkpoint.mat'),'native','model','cfg','-v7.3');
 referenceModel=model;referenceModel.tx_index=model.tx_index(selected);
-cfg.backend='matlab-serial';serial=wfi_simulate(referenceModel,cfg);
+cfg.backend='matlab-serial';serial=wust_simulate(referenceModel,cfg);
 assert(isequal(native.tx_xy_m(selected,:),serial.tx_xy_m)&&isequal(native.rx_xy_m,serial.rx_xy_m));
 subset=native.pressure(:,:,selected);
 assert(isequal(size(subset),size(serial.pressure)));
@@ -26,7 +26,7 @@ assert(max(abs(native.time_s-serial.time_s))<1e-15);
 rferr=norm(double(subset(:))-double(serial.pressure(:)))/norm(double(serial.pressure(:)));
 prep=struct('frequencies_hz',(.3:.025:1)*1e6,'x_m',x,'y_m',y,'c_geom_mps',1500, ...
     'window','none','phase_correction','none','mask',~eye(128));
-dn=wfi_prepare(native,prep);prep.mask=prep.mask(selected,:);ds=wfi_prepare(serial,prep);
+dn=wust_prepare(native,prep);prep.mask=prep.mask(selected,:);ds=wust_prepare(serial,prep);
 subset=dn.Y(selected,:,:);derr=norm(double(subset(:))-double(ds.Y(:)))/norm(double(ds.Y(:)));
 report=struct('schema','wfi.native_pipeline_test.v1','grid',[128,128],'transmitters',128, ...
     'rf_relative_l2',rferr,'frequency_relative_l2',derr,'passed',rferr<1e-4&&derr<1e-4, ...

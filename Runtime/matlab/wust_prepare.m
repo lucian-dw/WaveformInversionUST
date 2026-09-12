@@ -1,4 +1,4 @@
-function out=wfi_prepare(rf, cfg)
+function out=wust_prepare(rf, cfg)
 % RF: time_s [T,1], pressure [T,RX,TX], tx_xy_m/rx_xy_m [N,2].
 % Never crops/resizes SoS. Caller owns acquisition selection and spatial grid.
 % DTFT uses physical t (including pulse offset), not an FFT-bin approximation.

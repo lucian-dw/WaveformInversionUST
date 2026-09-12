@@ -1,6 +1,5 @@
-function test_runtime(backend)
-if nargin<1,backend='cpu';end
-root=fileparts(fileparts(mfilename('fullpath')));addpath(fullfile(root,'matlab'));wust_setup(backend);
+function capture_regression(root, output)
+backend='cpu';addpath(fullfile(root,'Runtime','matlab'));wust_setup(backend);
 rng(7);x=(-15:15)*1e-3;y=x;[X,Y]=meshgrid(x,y);c=1500+30*exp(-(X.^2+Y.^2)/3e-5);
 cfg=struct('backend',backend,'pml_m',.004,'pml_strength',10, ...
     'stencil_bounds',[1400,1700],'wavenumber','continuum','source_batch_size',2, ...
@@ -18,6 +17,7 @@ for k=1:2
 end
 initial=1500*ones(size(c));
 [loss,g]=wust_oracle(initial,obs,1,cfg);
+initial_gradient=g;
 direction=exp(-((X-.002).^2+(Y+.003).^2)/2e-5).*cfg.update_mask;direction=direction*1e-6;
 h=1e-3;
 if strcmp(backend,'gpu'),h=.1;end % complex-single LU needs a resolvable finite difference
@@ -33,6 +33,14 @@ assert(abs(l2-loss)/max(loss,eps)<1e-4 && norm(g2-g,'fro')/norm(g,'fro')<1e-4,'B
 result=wust_reconstruct(obs,initial,cfg);assert(all(isfinite(result.c_mps(:))));
 final=wust_oracle(result.c_mps,obs,1,cfg);assert(final<loss,'Tiny training case did not improve');
 fprintf('%s tiny FWI loss %.6g -> %.6g\n',backend,loss,final);
+rf=struct('time_s',(0:255)'*1e-7+2e-7, ...
+    'tx_xy_m',[x([8,23,25])',y([10,22,16])'], ...
+    'rx_xy_m',[x([13,24,15,8])',y([8,15,23,18])']);
+rf.pressure=randn(256,4,3);
+prep=struct('frequencies_hz',obs.frequencies_hz,'x_m',x,'y_m',y, ...
+    'c_geom_mps',1500,'window','none','phase_correction','none','mask',true(3,4));
+prepared=wust_prepare(rf,prep);
+save(output,'prepared','loss','initial_gradient','result','-v7');
 % Exact LDR9 derivative using explicit simulation metadata.
 cfg.wavenumber='kwave-ldr9';cfg.dispersion=struct('time_step_s',2e-8, ...
     'reference_speed_mps',1700,'model_reference_speed_mps',1500);

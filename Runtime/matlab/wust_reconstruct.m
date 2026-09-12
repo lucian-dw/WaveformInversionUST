@@ -1,4 +1,4 @@
-function result=wfi_reconstruct(obs,initial,cfg)
+function result=wust_reconstruct(obs,initial,cfg)
 % Frequency-continuation FWI. Block-LU is the linear solver, not the algorithm.
 % Upstream-compatible clipped PR/FR NCG + linearized step in slowness.
 % Fork fixes: exact mass-stencil derivative, explicit contracts, costs and mask.
@@ -6,7 +6,7 @@ required={'backend','schedule','bounds_mps','max_update_mps','step_damping', ...
     'source_batch_size','pml_strength','pml_m','stencil_bounds','wavenumber', ...
     'filter_cutoff','filter_order','update_mask'};
 for j=1:numel(required),assert(isfield(cfg,required{j}),['Missing ' required{j}]);end
-wfi_setup(cfg.backend);
+wust_setup(cfg.backend);
 assert(strcmp(obs.schema,'wfi.measurements.v1') && obs.fourier_sign==-1,'Observation schema/sign mismatch');
 assert(all(isfinite(cfg.schedule(:))) && all(cfg.schedule(:)==round(cfg.schedule(:))) ...
     && all(cfg.schedule(:)>=1 & cfg.schedule(:)<=numel(obs.frequencies_hz)),'Invalid frequency-index schedule');
@@ -18,7 +18,7 @@ allTimer=tic;n=numel(cfg.schedule);history=zeros([size(c),n+1],'single');history
 records=struct([]);previous=zeros(size(c));direction=previous;last=0;
 for step=1:n
     fi=cfg.schedule(step);stepTimer=tic;
-    [loss,g,state]=wfi_oracle(c,obs,fi,cfg);
+    [loss,g,state]=wust_oracle(c,obs,fi,cfg);
     rawg=g;
     if cfg.filter_cutoff>0
         g=ringingRemovalFilt(obs.x_m,obs.y_m,g,mean(initial(:)), ...
@@ -39,7 +39,7 @@ for step=1:n
         val=sum(abs(derivative).^2,'all');if isa(val,'gpuArray'),val=gather(val);end
         denom=denom+double(val);
     end
-    if wfiUseGPU,wait(gpuDevice);end
+    if wustUseGPU,wait(gpuDevice);end
     linearSeconds=toc(linearTimer);alpha=0;
     if denom>0,alpha=max(0,-sum(rawg(:).*direction(:))/denom);end
     candidate=1./(1./c+cfg.step_damping*alpha*double(direction));

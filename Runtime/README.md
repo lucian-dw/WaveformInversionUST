@@ -1,4 +1,4 @@
-# k-Wave → frequency-domain FWI runtime (0.1.0)
+# WUST runtime guide
 
 Standalone runtime for a thin external adapter. No dependency on
 `openbreastus_diffusion`, `kwave_dps`, PyTorch, or usct-benchlab.
@@ -12,14 +12,14 @@ Supported: 2D, sound-speed inversion, fixed zero attenuation.
 
 | Operation | MATLAB | Batch MAT variables |
 |---|---|---|
-| Generate RF | `rf=wfi_simulate(model,cfg)` | `model` |
-| RF → frequencies | `obs=wfi_prepare(rf,cfg)` | `rf, prepare_config` |
-| FWI | `result=wfi_reconstruct(obs,initial,cfg)` | `obs, initial_mps, update_mask` |
-| Loss/gradient | `[loss,g,state]=wfi_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
+| Generate RF | `rf=wust_simulate(model,cfg)` | `model` |
+| RF → frequencies | `obs=wust_prepare(rf,cfg)` | `rf, prepare_config` |
+| FWI | `result=wust_reconstruct(obs,initial,cfg)` | `obs, initial_mps, update_mask` |
+| Loss/gradient | `[loss,g,state]=wust_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
 
 Python (standard library only):
 ```sh
-python Runtime/python/wfi_runtime.py /absolute/request.json --matlab matlab
+python Runtime/python/wust_runtime.py /absolute/request.json --matlab matlab
 ```
 JSON: `schema="wfi.request.v1"`, `operation="simulate"|"prepare"|"reconstruct"`,
 absolute `input_mat/output_mat`, and `config`. Optional `kwave_toolbox_path`.
@@ -33,15 +33,21 @@ required configuration field and writes an adapter request.
 ## Install and verify
 
 MATLAB; Signal Processing Toolbox for FIR; Parallel Computing Toolbox and a
-supported CUDA MEX compiler for GPU FWI. External k-Wave toolbox must be on path.
+supported CUDA MEX compiler for GPU FWI. External k-Wave is needed only for simulation.
 No administrator installation or environment mutation is performed.
 ```matlab
 addpath('Runtime/matlab');
-wfi_build_mex;
 addpath('Runtime/tests');
 test_runtime('cpu');
-test_runtime('gpu');
 test_resampling;
+test_path_isolation;
+```
+
+Optional GPU and simulation checks (install their dependencies first):
+
+```matlab
+wust_build_mex;
+test_runtime('gpu');
 smoke_pipeline;
 ```
 Native HDF5 wrapper tests:
@@ -83,10 +89,12 @@ FWI source_batch_size controls RHS batching independently, but virtual sources
 remain cached for the linearized step. No OOM fallback, GPU scheduler or automatic
 /dev/shm allocation is hidden in this runtime.
 
-- [Contracts](docs/CONTRACTS.md)
-- [中文管线总结](docs/PIPELINE_ZH.md)
-- [Provenance and licenses](docs/PROVENANCE.md)
-- [Validation status](docs/VALIDATION.md)
+- [Contracts](../docs/CONTRACTS.md)
+- [中文管线总结](../docs/PIPELINE_ZH.md)
+- [Provenance and licenses](../provenance/README.md)
+- [Historical validation](../provenance/historical-validation/VALIDATION.md)
+- [Stage 4A1 validation](../docs/STAGE4A1_VALIDATION.md)
 
-Pin the compatibility commit SHA, not moving main/branch. Version 0.1.0 describes
-the schema; it does not replace a Git pin. Benchlab integration is out of scope.
+Pin the runtime commit SHA, not a moving branch. Runtime/VERSION is the version
+authority; serialized schema identifiers remain unchanged during Stage 4A1.
+BenchLab integration and the new external protocol are deferred to later stages.

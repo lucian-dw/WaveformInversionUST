@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def load(name,path):
     spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 native=load('native',ROOT/'native/run_native_source_batch.py')
-runtime=load('runtime',ROOT/'python/wfi_runtime.py')
+runtime=load('runtime',ROOT/'python/wust_runtime.py')
 
 class Contracts(unittest.TestCase):
     def make_input(self,path):

@@ -1,4 +1,4 @@
-function [loss,gradient,cache]=wfi_oracle(c,obs,fi,cfg)
+function [loss,gradient,cache]=wust_oracle(c,obs,fi,cfg)
 % Single-frequency source-projected least squares, exact discrete adjoint.
 % Output gradient is w.r.t. SLOWNESS, not velocity; no filtering here.
 % Per-TX complex scale a=(u'*d)/(u'*u); envelope theorem removes da/ds.
@@ -26,7 +26,7 @@ for first=1:batch:nt
     timer=tic;[u,v]=solver.solve(src,false);sync;forwardSeconds=forwardSeconds+toc(timer);
     u=reshape(u,ny*nx,nb);pred=u(obs.rx_index,:);
     mask=double(obs.mask(ids,:,fi).');data=double(obs.Y(ids,:,fi).');
-    if wfiUseGPU,mask=gpuArray(single(mask));data=gpuArray(single(data));end
+    if wustUseGPU,mask=gpuArray(single(mask));data=gpuArray(single(data));end
     pred=pred.*mask;data=data.*mask;
     den=sum(abs(pred).^2,1);num=sum(conj(pred).*data,1);
     a=zeros(size(num),'like',num);good=den>0;a(good)=num(good)./den(good);
@@ -49,5 +49,5 @@ function a=local(a)
 if isa(a,'gpuArray'),a=gather(a);end
 end
 function sync
-if wfiUseGPU,wait(gpuDevice);end
+if wustUseGPU,wait(gpuDevice);end
 end

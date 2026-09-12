@@ -1,4 +1,4 @@
-function wfi_build_mex
+function wust_build_mex
 % Fork change: checked CUDA calls; compiler compatibility without admin installs.
 root=fileparts(fileparts(mfilename('fullpath')));
 old=pwd; cleanup=onCleanup(@()cd(old)); cd(fullfile(root,'solver'));

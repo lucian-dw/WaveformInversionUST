@@ -4,9 +4,9 @@
 
 Actual GitHub fork of [rehmanali1994/WaveformInversionUST](https://github.com/rehmanali1994/WaveformInversionUST).
 Upstream base: `9fb31657c4ba9141a2bdf5c2eeac644320d090e8`.
-Original root Functions, Simulations, demo scripts, figures and MIT LICENSE.txt
-are retained. New runtime files are separately namespaced; adding the runtime
-does not rewrite the published upstream examples.
+Original Functions, Simulations, demo scripts, figures and README are retained
+byte-for-byte in reference/upstream-9fb31657; MIT LICENSE.txt stays at root.
+They are historical references and must not enter the maintained MATLAB path.
 
 Paper: Rehman Ali et al., *2-D Slicewise Waveform Inversion of Sound Speed and
 Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU
@@ -19,8 +19,10 @@ commit `d6e24bd0d4d3e4ce65aa9231ab2dbf02e16575ad`.
 ## Local development provenance
 
 The source donor is the user's USCT research workspace. Selected sources, not
-its data/credentials/checkpoints, were extracted. `SOURCE_MANIFEST.json` hashes
-each published source file. Relative historical source paths below are provenance,
+its data/credentials/checkpoints, were extracted. `source-manifest.json` hashes
+the maintained files; `source-map.json` records moves from the runtime starting
+commit. The original manifest is byte-preserved in `historical-validation/`.
+Relative historical source paths below are provenance,
 not runtime dependencies.
 
 | Runtime component | Donor / relation | Explicit changes in this fork |

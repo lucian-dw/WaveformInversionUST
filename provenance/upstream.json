@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/rehmanali1994/WaveformInversionUST",
+  "base_sha": "9fb31657c4ba9141a2bdf5c2eeac644320d090e8",
+  "maintained_repository": "https://github.com/lucian-dw/WaveformInversionUST",
+  "runtime_start_sha": "4273f29472fafd149d9ad23acf5748f639b06971",
+  "historical_reference": "reference/upstream-9fb31657",
+  "existing_runtime_tag": "runtime-v0.1.0",
+  "proposed_archive_tag": "archive/runtime-0.1.0",
+  "runtime_version_source": "Runtime/VERSION",
+  "licenses": {
+    "upstream_and_maintained_runtime": "MIT",
+    "Runtime/third_party/kspaceFirstOrder-CUDA": "LGPL-3.0-or-later"
+  }
+}
