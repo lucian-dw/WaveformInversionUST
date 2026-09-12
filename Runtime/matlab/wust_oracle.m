@@ -2,6 +2,7 @@ function [loss,gradient,cache]=wust_oracle(c,obs,fi,cfg)
 % Single-frequency source-projected least squares, exact discrete adjoint.
 % Output gradient is w.r.t. SLOWNESS, not velocity; no filtering here.
 % Per-TX complex scale a=(u'*d)/(u'*u); envelope theorem removes da/ds.
+obs=wust_validate_measurements(obs);
 t=tic; x=obs.x_m;y=obs.y_m;[ny,nx]=size(c);nt=numel(obs.tx_index);
 assert(isequal(size(c),[numel(y),numel(x)]) && all(isfinite(c(:))&c(:)>0),'Invalid medium grid');
 assert(all(diff(x)>0) && all(diff(y)>0),'Grid must increase');
@@ -26,10 +27,15 @@ for first=1:batch:nt
     timer=tic;[u,v]=solver.solve(src,false);sync;forwardSeconds=forwardSeconds+toc(timer);
     u=reshape(u,ny*nx,nb);pred=u(obs.rx_index,:);
     mask=double(obs.mask(ids,:,fi).');data=double(obs.Y(ids,:,fi).');
+    assert(all(sum(mask,1)>=2), 'WUST:NumericalFailure', ...
+        'Source-scale fitting requires at least two valid receivers per scheduled TX/frequency');
     if wustUseGPU,mask=gpuArray(single(mask));data=gpuArray(single(data));end
     pred=pred.*mask;data=data.*mask;
     den=sum(abs(pred).^2,1);num=sum(conj(pred).*data,1);
-    a=zeros(size(num),'like',num);good=den>0;a(good)=num(good)./den(good);
+    assert(all(local(isfinite(den)&den>realmin(classUnderlyingLocal(den)))) && ...
+        all(local(isfinite(num))), 'WUST:NumericalFailure','Unusable source-scale denominator/numerator');
+    a=num./den;
+    assert(all(local(isfinite(a))), 'WUST:NumericalFailure','Nonfinite source scale');
     r=(pred.*a-data).*mask;
     loss=loss+0.5*double(local(sum(abs(r).^2,'all')));
     normdata=normdata+double(local(sum(abs(data).^2,'all')));
@@ -40,10 +46,15 @@ for first=1:batch:nt
     sync;adjointSeconds=adjointSeconds+toc(timer);
     virtual{end+1}=v;scales{end+1}=a; %#ok<AGROW>
 end
+assert(isfinite(loss)&&isfinite(normdata)&&all(isfinite(gradient(:))), ...
+    'WUST:NumericalFailure','Nonfinite objective/gradient/data norm');
 cache=struct('solver',solver,'virtual',{virtual},'scales',{scales}, ...
     'data_norm',normdata,'factor_seconds',factorSeconds, ...
     'forward_seconds',forwardSeconds,'adjoint_seconds',adjointSeconds, ...
     'oracle_seconds',factorSeconds+toc(t),'forward_rhs',nt,'adjoint_rhs',nt);
+end
+function name=classUnderlyingLocal(a)
+if isa(a,'gpuArray'),name=classUnderlying(a);else,name=class(a);end
 end
 function a=local(a)
 if isa(a,'gpuArray'),a=gather(a);end

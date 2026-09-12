@@ -17,7 +17,11 @@ def inventory():
     paths = [ROOT / "README.md", ROOT / "LICENSE.txt", ROOT / ".gitignore"]
     for directory in ("Runtime", "docs", "provenance", "reference"):
         for path in (ROOT / directory).rglob("*"):
-            if not path.is_file() or path == MANIFEST:
+            if (
+                not path.is_file()
+                or path == MANIFEST
+                or path == ROOT / "provenance/build-manifest.json"
+            ):
                 continue
             if "__pycache__" in path.parts or "artifacts" in path.parts:
                 continue
@@ -56,6 +60,7 @@ def main():
             json.dumps(
                 {
                     "schema": "wust.source-manifest",
+                    "schema_version": 1,
                     "version_file": "Runtime/VERSION",
                     "sha256": inventory(),
                 },

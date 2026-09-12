@@ -8,7 +8,7 @@ cfg=struct('backend',backend,'pml_m',.004,'pml_strength',10, ...
     'filter_cutoff',0,'filter_order',4,'schedule',[1,1,2,2],'update_mask',true(size(c)));
 cfg.update_mask([1:5,end-4:end],:)=false;cfg.update_mask(:,[1:5,end-4:end])=false;
 tx=sub2ind(size(c),[10,22,16],[8,23,25]).';rx=sub2ind(size(c),[8,15,23,18],[13,24,15,8]).';
-obs=struct('schema','wfi.measurements.v1','x_m',x,'y_m',y,'tx_index',tx,'rx_index',rx, ...
+obs=struct('x_m',x,'y_m',y,'tx_index',tx,'rx_index',rx, ...
     'frequencies_hz',[.1e6,.12e6],'fourier_sign',-1,'mask',true(3,4,2));
 src=zeros([size(c),3]);for j=1:3,src(tx(j)+(j-1)*numel(c))=1;end
 for k=1:2
@@ -16,6 +16,7 @@ for k=1:2
     u=s.solve(src,false);if isa(u,'gpuArray'),u=gather(u);end;u=reshape(u,[],3);
     obs.Y(:,:,k)=u(rx,:).';
 end
+obs=wust_test_measurements(obs);
 initial=1500*ones(size(c));
 [loss,g]=wust_oracle(initial,obs,1,cfg);
 direction=exp(-((X-.002).^2+(Y+.003).^2)/2e-5).*cfg.update_mask;direction=direction*1e-6;
