@@ -1,0 +1,80 @@
+{
+  "schema": "wfi.a100_validation.v1",
+  "date": "2026-09-12",
+  "hardware": "NVIDIA A100-SXM4-80GB",
+  "matlab": "R2021b",
+  "native_cuda": "11.4",
+  "scope": "numerical test media only",
+  "wrapper": {
+    "schema": "wfi.native_pipeline_test.v1",
+    "grid": [
+      128,
+      128
+    ],
+    "transmitters": 128,
+    "rf_relative_l2": 0.0000037962280291354263,
+    "frequency_relative_l2": 0.000003621266432628116,
+    "passed": true,
+    "native_generation_seconds": 5.541591,
+    "matlab_serial_generation_seconds": 35.924842,
+    "native_filter_seconds": 1.000428,
+    "serial_filter_seconds": 0.065656,
+    "matlab_reference_tx_indices": [
+      1,
+      2,
+      17,
+      33,
+      65,
+      81,
+      97,
+      128
+    ],
+    "note": "128 native TX vs eight independent MATLAB TX; separate CUDA serial gate covers all 128; no extrapolated speedup"
+  },
+  "serial128": {
+    "schema": "wfi.native_validation.v1",
+    "rf_relative_l2": 0,
+    "dtft_relative_l2": 0,
+    "serial_wall_seconds": 121.84865947649814,
+    "native_wall_seconds": 2.8149241160135716,
+    "passed": true,
+    "speedup_including_process_io": 43.286658700077965,
+    "batch_size": 128,
+    "note": "same modified binary, native disabled for serial; not a peak-memory measurement"
+  },
+  "production": {
+    "grid_including_pml": [
+      1024,
+      1024
+    ],
+    "transmitters": 128,
+    "time_steps": 4751,
+    "dt_s": 4.631267487859025e-8,
+    "generation_seconds": 91.295039,
+    "fir_seconds": 1.339452,
+    "prepare_seconds": 0.391706,
+    "rf_save_seconds": 5.752982,
+    "rf_shape": [
+      2376,
+      128,
+      128
+    ],
+    "frequency_shape": [
+      128,
+      128,
+      29
+    ],
+    "finite": true,
+    "note": "Representative production computational grid, artificial numerical medium; not anatomical accuracy or speedup benchmark"
+  },
+  "production-resources": {
+    "interval_s": 0.5,
+    "peak_tree_rss_bytes": 7817056256,
+    "peak_gpu_memory_mib": 7634
+  },
+  "wrapper-resources": {
+    "interval_s": 0.5,
+    "peak_tree_rss_bytes": 1465229312,
+    "peak_gpu_memory_mib": 600
+  }
+}
