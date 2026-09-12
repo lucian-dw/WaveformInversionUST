@@ -3,7 +3,8 @@
 > **Fork runtime:** see [Runtime/README.md](Runtime/README.md) for the standalone
 > k-Wave native128 → RF/FIR → frequency-domain FWI interface, contracts and tests.
 > The original scripts below remain reference implementations. Pin the
-> compatibility commit; runtime 0.1.0 is a release candidate pending A100 validation.
+> compatibility commit; runtime 0.1.0 has local and A100 smoke/native validation.
+> See Runtime/docs/VALIDATION.md for measured results and remaining limitations.
 Frequency-Domain Waveform Inversion Ultrasound Tomography (UST) Using a Ring-Array Transducer
 
 Ultrasound tomography (UST) is a medical imaging system that uses the transmission of ultrasound through tissue to create images of sound speed and attenuation.

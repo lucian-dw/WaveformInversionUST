@@ -64,12 +64,17 @@ make -C Runtime/third_party/kspaceFirstOrder-CUDA -j4 \
   CUDA_ARCH='--generate-code arch=compute_80,code=sm_80'
 python Runtime/native/install_launcher.py \
   --binary /absolute/path/to/kspaceFirstOrder-CUDA \
-  --directory /absolute/path/to/new-wrapper-directory
+  --directory /absolute/path/to/new-wrapper-directory \
+  --library-dir /path/to/hdf5/lib --library-dir /path/to/cuda/lib64
 ```
 Set simulation `backend='native128'`, explicit `binary_path` (wrapper directory)
 and zero-based `device_num`. Ordered TX and RX must be the same 128 grid indices.
 Supported physics: scalar density, linear propagation, zero absorption, 2D.
 Unsupported HDF5 flags fail closed. PML is outside the caller grid.
+The library directories are important: k-Wave clears LD_LIBRARY_PATH when it
+launches external binaries. The wrapper restores only the explicitly configured
+directories. The Makefile also passes CUDA_ARCH at device-link time, not just
+compilation; omitting it can yield a binary without the target GPU kernels.
 RF and HDF5 intermediates are retained. Use an explicit disk work directory.
 
 A100 80 GB is the intended full native128 target. Check RAM/VRAM before full jobs:

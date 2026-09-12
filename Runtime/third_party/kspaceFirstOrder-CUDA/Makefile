@@ -303,8 +303,9 @@ DEPENDENCIES = main.o                                   \
 all: $(TARGET)
 
 # Link target
+# Fork: retain the selected architecture at device link, not nvcc's default sm_52.
 $(TARGET): $(DEPENDENCIES)
-  $(CXX) $(LDFLAGS) $(DEPENDENCIES) $(LDLIBS) -o $@
+  $(CXX) $(CUDA_ARCH) $(LDFLAGS) $(DEPENDENCIES) $(LDLIBS) -o $@
 
 # Compile CPU units
 %.o: %.cpp

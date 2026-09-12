@@ -13,6 +13,9 @@ assert(dx>0&&dy>0&&max(abs(diff(x)-dx))<dx*1e-7&&max(abs(diff(y)-dy))<dy*1e-7,'U
 assert(model.dt_s>0 && max(c(:))*model.dt_s/min(dx,dy)<=0.3,'CFL exceeds tested 0.3');
 assert(cfg.density_kg_m3>0&&cfg.sound_speed_ref_mps>=max(c(:)),'Invalid density or reference speed');
 assert(cfg.downsample_factor>=1&&cfg.downsample_factor==round(cfg.downsample_factor),'Invalid decimation factor');
+assert(isscalar(cfg.pml_size)&&isfinite(cfg.pml_size)&&cfg.pml_size>=1&&cfg.pml_size==round(cfg.pml_size),'Positive integer outside PML required');
+assert(isvector(model.source_pressure)&&numel(model.source_pressure)>1&&all(isfinite(model.source_pressure(:))),'Finite source waveform required');
+assert(isscalar(cfg.time_offset_s)&&isfinite(cfg.time_offset_s),'Finite source time offset required');
 tx=double(model.tx_index(:));rx=double(model.rx_index(:));
 for ids={tx,rx}
     v=ids{1};assert(all(v==round(v)&v>=1&v<=nx*ny)&&numel(unique(v))==numel(v),'Invalid/duplicate array indices');

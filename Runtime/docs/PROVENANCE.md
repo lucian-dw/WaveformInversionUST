@@ -57,6 +57,9 @@ CudaParameters/constant-memory field dimensions, KSpaceFirstOrderSolver FFT setu
 CufftComplexMatrix planMany, and SolverCudaKernels physical-index/batch addressing.
 Each TX has a separate plane; the batch axis is not transformed as a spatial axis.
 The imported Makefile targets sm_80 by default; override CUDA_ARCH for other GPUs.
+The A100 extraction audit additionally fixed device-link architecture propagation
+and added repeatable launcher library directories, because the MATLAB k-Wave
+bridge deliberately clears LD_LIBRARY_PATH before starting a binary.
 
 No RF, SoS arrays, model weights, private configuration, compiled libraries or
 server paths were newly published. Upstream example figures remain upstream's.
