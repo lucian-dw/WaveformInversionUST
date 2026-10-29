@@ -7,7 +7,7 @@ CPU solves use sparse linear algebra; optional GPU solves use CUDA Block-LU MEX.
 This is research software, not a clinically validated reconstruction system.
 
 See the [runtime API](docs/RUNTIME_API.md) and
-[Stage 4A2 validation evidence](docs/STAGE4A2_VALIDATION.md).
+[research archive](docs/research_index.md).
 
 ## Maintained runtime
 
@@ -26,8 +26,8 @@ Runtime/
   native/                 # optional native simulation tooling
   third_party/            # separately licensed k-Wave CUDA source
 docs/                     # current contracts and usage
-provenance/               # attribution and historical source mapping
-reference/upstream-9fb31657/  # original upstream examples, not a production backend
+examples/                 # explicit simulation and reconstruction demonstrations
+ATTRIBUTION.md            # upstream source, scientific citation and licenses
 ```
 
 ## Requirements and CPU checks
@@ -43,7 +43,7 @@ From the repository root:
 python -m pip install numpy h5py
 python -m unittest discover -s Runtime/tests -p 'test_*.py'
 python Runtime/python/export_schemas.py
-matlab -batch "addpath('Runtime/tests'); test_runtime('cpu'); test_resampling; test_path_isolation; test_ingest_frequency; test_batch_contract;"
+matlab -batch "addpath('Runtime/tests'); test_runtime('cpu'); test_resampling; test_ingest_frequency; test_batch_contract;"
 ```
 
 Add **only** `Runtime/matlab` to the production MATLAB path. `wust_setup` selects
@@ -82,10 +82,9 @@ reconstruction is supported.
 ## Attribution and licenses
 
 Derived from [Rehman Ali's WaveformInversionUST](https://github.com/rehmanali1994/WaveformInversionUST)
-at `9fb31657c4ba9141a2bdf5c2eeac644320d090e8`. The original README, examples,
-solver and figures remain byte-preserved under [reference](reference/upstream-9fb31657/README.md).
-See [provenance](provenance/README.md) for the maintained modifications and
-[the migration record](docs/MAINLINE_MIGRATION.md) for archive and validation policy.
+at `9fb31657c4ba9141a2bdf5c2eeac644320d090e8`. Original examples, solver and figures
+are preserved in the [research archive](docs/research_index.md).
+See [attribution](ATTRIBUTION.md) for maintained modifications and licenses.
 
 Please cite Rehman Ali et al., *2-D Slicewise Waveform Inversion of Sound Speed
 and Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU

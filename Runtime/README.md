@@ -24,11 +24,11 @@ python Runtime/python/wust_runtime.py describe --json
 python Runtime/python/wust_runtime.py run /absolute/request.json --matlab matlab --timeout-s 300
 ```
 The [runtime contract](../docs/RUNTIME_API.md) defines JSON manifests and explicit
-HDF5 real/imag arrays, source identity, input snapshots and atomic finalization.
+HDF5 real/imag arrays and arrays-first result publication.
 The launcher supervises a bounded MATLAB process group. Logs/errors propagate;
 existing outputs are refused; no best-GT checkpoint selection.
 
-Executable examples: `tests/smoke_pipeline.m` for direct MATLAB simulation and
+Executable examples: `../examples/simulate_and_reconstruct.m` for direct MATLAB simulation and
 `tests/integration_runtime.py` for the actual new external launcher.
 
 ## Install and verify
@@ -41,7 +41,6 @@ addpath('Runtime/matlab');
 addpath('Runtime/tests');
 test_runtime('cpu');
 test_resampling;
-test_path_isolation;
 ```
 
 Optional GPU and simulation checks (install their dependencies first):
@@ -49,7 +48,8 @@ Optional GPU and simulation checks (install their dependencies first):
 ```matlab
 wust_build_mex;
 test_runtime('gpu');
-smoke_pipeline;
+addpath('examples');
+simulate_and_reconstruct('/tmp/wust-example');
 ```
 Native HDF5 wrapper tests:
 ```sh
@@ -92,10 +92,8 @@ remain cached for the linearized step. No OOM fallback, GPU scheduler or automat
 
 - [Contracts](../docs/CONTRACTS.md)
 - [中文管线总结](../docs/PIPELINE_ZH.md)
-- [Provenance and licenses](../provenance/README.md)
-- [Historical validation](../provenance/historical-validation/VALIDATION.md)
-- [Stage 4A1 validation](../docs/STAGE4A1_VALIDATION.md)
+- [Attribution and licenses](../ATTRIBUTION.md)
+- [Historical validation](../docs/research_index.md)
 
-Pin the runtime commit SHA, not a moving branch. Runtime/VERSION is the version
-authority. New schema versions are separate integers. BenchLab integration is
-deferred to Stage 4B; the old MAT request parser is not maintained in parallel.
+Runtime/VERSION is the software version authority. Protocol versions are separate
+integers. BenchLab calls the same protocol-2 reconstruction operation as other callers.

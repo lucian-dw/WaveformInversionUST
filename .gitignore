@@ -1,8 +1,9 @@
-*.mexw64
-*.mexa64
+*.mex*
 *.o
 __pycache__/
 *.pyc
 Runtime/third_party/kspaceFirstOrder-CUDA/kspaceFirstOrder-CUDA
 Runtime/tests/artifacts/
 *.log
+/output/
+/build/

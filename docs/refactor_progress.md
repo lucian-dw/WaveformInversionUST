@@ -87,3 +87,16 @@ or a new imaging-quality campaign.
 Next: P3 removes historical runtime duplicates and relocates research material
 to sibling research_archive with an index. Native display-only Git labels were
 removed; the native backend will be rebuilt at final acceptance.
+
+## P3: maintained runtime and research archive
+
+- Moved 39 listed historical/reference/provenance files into sibling
+  research_archive/WaveformInversionUST. Added an index with source commits.
+- Consolidated upstream paper, license and source attribution in ATTRIBUTION.md;
+  kept vendor licenses intact. Removed reference-path certification tests.
+- Moved the simulation/reconstruction teaching recipe into examples with an
+  explicit output directory and the v2 Hz schedule. It is not normal CI.
+- Local Python runtime suite: 15 passed. This unit changes no numerical kernels;
+  CPU/GPU numerical evidence remains the P2 gate, not a new P3 hardware claim.
+
+Next: P4 makes process ownership, sampling and backend selection explicit.
