@@ -1,54 +1,42 @@
-# k-Wave → FWI 管线整理
+# WUST 使用流程
 
-## 分层
+## 观测
 
-```text
-benchlab：数据集、裁剪/缩放、物理坐标、split、评价合同
-    ↓ 计算网格上的 SoS + 阵元索引 + 源波形
-wust_simulate：2D k-Wave / native128 独立 TX 批处理
-    ↓ FIR 抗混叠、保留 RF [time, RX, TX] 与实际阵元坐标
-wust_prepare：显式时间窗 / DTFT / 可选落点相位修正 / 显式 mask
-    ↓ 复数观测 [TX, RX, frequency]
-wust_reconstruct：逐频 FWI、源幅相消元、伴随梯度、NCG
-    ↓ Helmholtz 九点差分 + PML + CUDA Block-LU
-物理网格 SoS、更新历史、残差、真实成本 → benchlab 评价
-```
+~~~text
+已有复数总压力 + 几何 + mask + 单位/傅里叶约定
+                     |
+                     v
+              reconstruct 请求
 
-FWI 是优化流程，Block-LU 是线性求解器。上游演示脚本保留；
-新接口在 Runtime 内，不依赖 diffusion/DPS，也不搬运所有研究试验分支。
+已有 RF -> prepare -> 规范频域观测（显式数据准备）
+介质模型 -> simulate -> RF（数据集/fixture 工具，不在生产重建内）
+~~~
 
-## 两项不能混淆的改进
+WUST 不依赖 BenchLab，不从病例真值生成生产观测。输入可以是 frequency_input，
+也可以是已经准备的 measurements。位置用 [x,y]，图像用 [y,x]；完整规范见
+[CONTRACTS](CONTRACTS.md)。
 
-**native128 是速度改进。** CUDA 中每个 TX 使用独立传播场，共享介质，
-以 rank-2 cuFFT planMany 与批量 kernel 调度全部发射，不是同时激励后分离，
-不做测量融合。不同 batch 使用独立线性地址，恢复原始 RX 逻辑顺序。
+## 一次重建
 
-**抗混叠是数值合同修复。** 历史 1:ds:end 抽点不低通。旧 ds5 在原始
-fs≈10.584 MHz 示例中，保存 Nyquist≈1.058 MHz，不能声称支持 1.25 MHz。
-本版生成端使用 FIR/polyphase 后降采样；ds2 示例保存 fs≈5.292 MHz，
-实际 fs 随案例 dt 改变。旧 native 入口仍残留过抽点版本，故未直接照搬。
+~~~text
+Python launcher：检查协议、路径和时限
+  -> 一个 MATLAB 进程
+       -> prepare_observations：轴/单位/mask、频率排序、落点与傅里叶转换
+       -> 完整 Hz 计划 -> 按 max_updates 截断
+       -> 每项：Helmholtz 正演 -> 复源尺度消元 -> 残差与伴随
+               -> NCG/曲率步长 -> 慢度更新 -> 限幅与边界约束
+  -> 写出 HDF5 数值数组 -> JSON 成功索引
+~~~
 
-## 保留与边界
+CPU/GPU 必须显式选择，不在失败后自动切换。独立 ingest_frequency 操作用于导出
+规范观测，不要求每次重建额外启动一次 MATLAB。RF 降采样采用抗混叠 FIR。
+native-batch 仿真中每个 TX 是独立场，TX/RX 不必相同；设备与批量大小显式提供。
 
-- 常用 29 频 0.30:0.025:1.00 MHz 是调用配置，不写死。
-- 保存 grid-snapped 阵元，避免名义圆环与实际落点的传播相位误差。
-- 保留零吸收 k-Wave-aware LDR9；必须提供原始 dt 和参考声速。
-- 保留 CUDA 错误检查、GPU 波场驻留、多 RHS 求解。
-- 导数审计补齐九点质量模板；不冒充所有历史实验的逐位重放。
-- 不纳入 KCI D1/D3/FD、网络、3D slab、在线学习和失败研究支线。
-- 不自动删除 RF、不自动占用 /dev/shm、不调度其他用户的 GPU。
+## 结果
 
-## benchlab 后续职责（本轮不实现）
+声速 c_mps 为米/秒。日志包含完整/实际频率计划、更新数、更新时间和逐频更新前 loss。
+计划结束不是收敛。超时由外层回收所属进程组，不伪造最终图像；未计算的最终残差留空。
+fixture 生成和正式重建分别计时，CPU、GPU、native 验收各自记录。
 
-固定 compatibility commit，按 CONTRACTS.md 封装 MAT 输入，调用 MATLAB
-函数或 Python launcher，接收完整计算域输出，再由 benchlab 裁剪评价。
-已有 review 分支仅作需求参考，未修改。
-
-## 发布定位
-
-这是带可执行 smoke 的首个独立 runtime，不是所有历史分支的重新认证。
-本轮已在 A100 从源码编译，完成全 128 路 serial/native 同输入对照（RF
-和 DTFT 误差为 0）、8 路独立 MATLAB 参考对照（约 1e-6），以及 1024²
-计算网格 native128 生成。生产尺寸生成约 91.30 秒，FIR 1.34 秒，29 频
-提取 0.39 秒；具体硬件与采样内存见 VALIDATION.md。小网格含进程/I/O 的
-43.29 倍加速不能外推成大网格 kernel 加速比。生成 RF 已保留。
+[部署](../Runtime/README.md) · [协议示例](RUNTIME_API.md) ·
+[历史研究](research_index.md)

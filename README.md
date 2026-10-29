@@ -1,97 +1,63 @@
-# WaveformInversionUST (WUST)
+# WaveformInversionUST
 
-WUST is an independent MATLAB runtime for **2D sound-speed full-waveform
-inversion**. It uses frequency continuation, complex source-scale elimination,
-nonlinear conjugate-gradient updates and a nine-point Helmholtz discretization.
-CPU solves use sparse linear algebra; optional GPU solves use CUDA Block-LU MEX.
+Independent MATLAB runtime for **2-D sound-speed full-waveform inversion**.
+Frequency continuation, per-source complex-scale elimination and nonlinear
+conjugate gradients use an optimized nine-point Helmholtz discretization.
+CPU uses sparse double-precision solves; GPU uses complex-single CUDA Block LU.
 This is research software, not a clinically validated reconstruction system.
 
-See the [runtime API](docs/RUNTIME_API.md) and
-[research archive](docs/research_index.md).
+## Install
 
-## Maintained runtime
+Python 3.10+ with NumPy/h5py provides the external launcher. MATLAB is required
+for reconstruction. GPU execution additionally needs Parallel Computing Toolbox
+and CUDA MEX; FIR resampling needs Signal Processing Toolbox. k-Wave is only a
+simulation dependency. See [deployment](Runtime/README.md).
 
-`Runtime/` is the maintained implementation. It does not import BenchLab,
-PyTorch, diffusion packages or any consumer repository. Reconstruction consumes
-supplied observations; RF preparation and simulation are separate data tools.
-Active reconstruction estimates sound speed with attenuation fixed to zero.
-
-```text
-Runtime/
-  VERSION                 # authoritative runtime version
-  python/wust_runtime.py  # external MATLAB batch launcher
-  matlab/wust_*.m         # preparation, reconstruction, oracle, setup, simulation
-  solver/                 # maintained Helmholtz and optional CUDA Block-LU
-  tests/                  # CPU, GPU and optional simulation checks
-  native/                 # optional native simulation tooling
-  third_party/            # separately licensed k-Wave CUDA source
-docs/                     # current contracts and usage
-examples/                 # explicit simulation and reconstruction demonstrations
-ATTRIBUTION.md            # upstream source, scientific citation and licenses
-```
-
-## Requirements and CPU checks
-
-MATLAB is required for FWI. Signal Processing Toolbox is needed for FIR
-resampling. GPU FWI additionally needs Parallel Computing Toolbox and a supported
-CUDA MEX compiler. The external k-Wave toolbox and native simulator are optional
-simulation dependencies, not requirements for reconstructing existing data.
-
-From the repository root:
-
-```sh
+~~~bash
 python -m pip install numpy h5py
-python -m unittest discover -s Runtime/tests -p 'test_*.py'
-python Runtime/python/export_schemas.py
-matlab -batch "addpath('Runtime/tests'); test_runtime('cpu'); test_resampling; test_ingest_frequency; test_batch_contract;"
-```
-
-Add **only** `Runtime/matlab` to the production MATLAB path. `wust_setup` selects
-the maintained solver and rejects path shadowing. Never recursively add this
-repository to the path. Run historical examples in a separate MATLAB process.
-
-## Run FWI
-
-```matlab
-addpath('Runtime/matlab');
-result = wust_reconstruct(obs, initial_mps, config);
-```
-
-`obs` contains supplied complex pressure, frequencies, geometry and a channel
-mask. `initial_mps` is a sound-speed image on that geometry. `config` explicitly
-specifies a physical Hz schedule, numerical controls and update mask.
-See [the external runtime contract](docs/RUNTIME_API.md) for JSON/HDF5 schemas,
-capabilities, units, array axes and required policies;
-[the runtime guide](Runtime/README.md) covers the JSON/HDF5 interface, optional
-GPU build and simulation. [The CPU test](Runtime/tests/test_runtime.m) is a
-complete finite-input reconstruction example with every required configuration
-field. Its generated observations are a numerical fixture, not measured data.
-
-```sh
 python Runtime/python/wust_runtime.py describe --json
-python Runtime/python/wust_runtime.py run /absolute/request.json --matlab matlab --timeout-s 300
-```
+~~~
 
-The maintained protocol uses `wust.*` schema names and integer `schema_version=2`.
-Frequency input or canonical measurements enter reconstruction in one MATLAB
-process. Ingestion and RF tooling share the same physical preparation function.
-Runtime/VERSION records software version; no source identity gate is used.
-Schedule completion does not establish numerical convergence. No attenuation
-reconstruction is supported.
+Discovery is static and does not start MATLAB. An explicit host check is:
 
-## Attribution and licenses
+~~~bash
+python Runtime/python/wust_runtime.py describe --probe --backend cpu --matlab /path/to/matlab
+~~~
 
-Derived from [Rehman Ali's WaveformInversionUST](https://github.com/rehmanali1994/WaveformInversionUST)
-at `9fb31657c4ba9141a2bdf5c2eeac644320d090e8`. Original examples, solver and figures
-are preserved in the [research archive](docs/research_index.md).
-See [attribution](ATTRIBUTION.md) for maintained modifications and licenses.
+## One reconstruction
 
-Please cite Rehman Ali et al., *2-D Slicewise Waveform Inversion of Sound Speed
-and Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU
-Solver*, IEEE TMI, [doi:10.1109/TMI.2024.3383816](https://doi.org/10.1109/TMI.2024.3383816).
-The paper's attenuation reconstruction is not an active feature of this runtime.
+Prepare a protocol-v2 frequency input and initial-model artifact, then invoke:
 
-[LICENSE.txt](LICENSE.txt) is MIT. The vendored
+~~~bash
+python Runtime/python/wust_runtime.py run /absolute/request.json \
+  --matlab /path/to/matlab --timeout-s 300
+~~~
+
+The [API guide](docs/RUNTIME_API.md) contains a complete request. One MATLAB process
+normalizes the supplied observations and runs the entire resolved frequency plan.
+WUST does not import BenchLab and never generates production observations from GT.
+RF preparation and simulation are separate data tools.
+
+## Read results
+
+The output JSON names its HDF5 arrays. Use Runtime/python/wust_io.read_artifact
+for explicit axes/units and real/imaginary datasets. Final c_mps is [y,x] in m/s.
+Metadata records backend, executed schedule, pre-update losses and completion
+reason. Finishing a schedule is not convergence. Attenuation is fixed to zero.
+
+Add only Runtime/matlab to a production MATLAB path, not genpath of the repository.
+[Contracts](docs/CONTRACTS.md) define the math;
+[Chinese pipeline](docs/PIPELINE_ZH.md) describes the flow;
+[research archive](docs/research_index.md) indexes historical material.
+
+## Attribution and license
+
+Derived from [Rehman Ali's WaveformInversionUST](https://github.com/rehmanali1994/WaveformInversionUST).
+Please cite Ali et al., *2-D Slicewise Waveform Inversion of Sound Speed and
+Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU
+Solver*, [IEEE TMI, 2024](https://doi.org/10.1109/TMI.2024.3383816).
+See [ATTRIBUTION.md](ATTRIBUTION.md) for source and modifications.
+
+[LICENSE.txt](LICENSE.txt) is MIT. The separately licensed
 [k-Wave CUDA source](Runtime/third_party/kspaceFirstOrder-CUDA/License.md) is
-**LGPL-3.0-or-later** with its own copyright and redistribution requirements;
-it is not relicensed as MIT. External MATLAB and k-Wave toolboxes are not included.
+LGPL-3.0-or-later and is not relicensed as MIT. MATLAB and external k-Wave are not included.

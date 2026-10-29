@@ -97,9 +97,9 @@ def read_artifact(path, expected=None):
 
             def load(dataset, dtype, spec=spec, key=key):
                 if not isinstance(handle.get(dataset, getlink=True), h5py.HardLink):
-                    raise ValueError(
+                    raise ValueError(  # noqa: TRY004
                         "Only local datasets are supported"
-                    )  # noqa: TRY004
+                    )
                 obj = handle[dataset]
                 if (
                     not isinstance(obj, h5py.Dataset)

@@ -1,7 +1,112 @@
 function test_runtime(backend)
-if nargin<1,backend='cpu';end
-root=fileparts(fileparts(mfilename('fullpath')));addpath(fullfile(root,'matlab'));wust_setup(backend);
-rng(7);x=(-15:15)*1e-3;y=x;[X,Y]=meshgrid(x,y);c=1500+30*exp(-(X.^2+Y.^2)/3e-5);
+% One backend-explicit gate for derivatives, batching and reconstruction.
+if nargin < 1
+    backend = 'cpu';
+end
+root = fileparts(fileparts(mfilename('fullpath')));
+addpath(fullfile(root, 'matlab'));
+wust_setup(backend);
+check_mex_boundary(backend);
+x = (-15:15)*1e-3;
+spec = struct('x_m', x, 'y_m', x, ...
+    'tx_index', sub2ind([31,31], [10,22,16], [8,23,25]).', ...
+    'rx_index', sub2ind([31,31], [8,15,23,18], [13,24,15,8]).', ...
+    'frequencies_hz', [1e5,1.2e5]);
+[obs, sound_speed, source] = wust_test_measurements(spec, backend, spec.frequencies_hz);
+[X, Y] = meshgrid(obs.x_m, obs.y_m);
+assert(isequal(ringingRemovalFilt(x,x,sound_speed,1500,1e5,0,4), sound_speed));
+filtered = ringingRemovalFilt(x,x,sound_speed,1500,1e5,.5,4);
+assert(all(isfinite(filtered(:))) && norm(filtered-sound_speed,'fro') > 0);
+cfg = struct('backend', backend, 'pml_m', .004, 'pml_strength', 10, ...
+    'stencil_bounds', [1400,1700], 'wavenumber', 'continuum', 'source_batch_size', 2, ...
+    'step_damping', .25, 'max_update_mps', 12, 'bounds_mps', [1300,1800], ...
+    'filter_cutoff', 0, 'filter_order', 4, ...
+    'frequency_schedule_hz', [1e5,1e5,1.2e5,1.2e5], 'update_mask', true(size(sound_speed)));
+cfg.update_mask([1:5,end-4:end], :) = false;
+cfg.update_mask(:, [1:5,end-4:end]) = false;
+options = struct('backend', backend, 'stencil_bounds', cfg.stencil_bounds);
+solver = HelmholtzSolver(x, x, sound_speed, zeros(size(sound_speed)), ...
+    1e5, -1, 10, .004, options);
+% Setup cannot change an already constructed instance's backend.
+wust_setup('cpu');
+wave = solver.solve(source, false);
+assert(isa(wave,'gpuArray') == strcmp(backend,'gpu'));
+initial = 1500*ones(size(sound_speed));
+direction = exp(-((X-.002).^2+(Y+.003).^2)/2e-5).*cfg.update_mask*1e-6;
+step = 1e-3;
+tolerance = 1e-4;
+if strcmp(backend,'gpu')
+    % Complex-single LU needs a resolvable finite difference.
+    step = .1;
+    tolerance = .03;
+end
+[loss, gradient] = wust_oracle(initial, obs, 1, cfg);
+check_derivative(initial, obs, cfg, direction, step, tolerance);
+batched = cfg;
+batched.source_batch_size = 3;
+[batch_loss, batch_gradient] = wust_oracle(initial, obs, 1, batched);
+assert(abs(batch_loss-loss)/max(loss,eps) < 1e-4);
+assert(norm(batch_gradient-gradient,'fro')/norm(gradient,'fro') < 1e-4);
+result = wust_reconstruct(obs, initial, cfg);
+assert(all(isfinite(result.c_mps(:))));
+assert(strcmp(result.completion.reason, 'schedule_complete'));
+assert(~result.completion.converged && result.completed_updates == 4);
+assert(result.planned_schedule_length == 4);
+assert(isempty(result.final_data_residual) && result.records(end).loss_model_step == 3);
+final_loss = wust_oracle(result.c_mps, obs, 1, cfg);
+assert(final_loss < loss, 'Training objective did not decrease');
+fprintf('%s FWI loss %.6g -> %.6g\n', backend, loss, final_loss);
+short = cfg;
+short.max_updates = 1;
+short.save_history = true;
+result = wust_reconstruct(obs, initial, short);
+assert(strcmp(result.completion.reason,'caller_truncated_schedule'));
+assert(result.planned_schedule_length == 4 && result.completed_updates == 1);
+assert(isequal(size(result.history_mps), [31,31,2]));
+zero = cfg;
+zero.max_updates = 0;
+result = wust_reconstruct(obs, initial, zero);
+assert(isequal(result.c_mps,initial) && isempty(result.records));
+assert(result.completed_updates == 0);
+default = rmfield(cfg, 'frequency_schedule_hz');
+result = wust_reconstruct(obs, initial, default);
+assert(result.planned_schedule_length == 2);
+assert(isequal(result.executed_frequencies_hz(:), [1e5;1.2e5]));
+bad = obs;
+bad.mask(1,:,1) = false;
+bad.mask(1,1,1) = true;
+reject(@() wust_reconstruct(bad,initial,cfg), 'WUST:InvalidInput');
+bad = obs;
+bad.Y(:) = realmax/2;
+reject(@() wust_reconstruct(bad,initial,cfg), 'WUST:NumericalFailure');
+cfg.wavenumber = 'kwave-ldr9';
+cfg.dispersion = struct('time_step_s',2e-8, ...
+    'reference_speed_mps',1700,'model_reference_speed_mps',1500);
+check_derivative(initial, obs, cfg, direction, step, tolerance);
+end
+
+function check_derivative(initial, obs, cfg, direction, step, tolerance)
+[~, gradient] = wust_oracle(initial, obs, 1, cfg);
+plus = wust_oracle(1./(1./initial+step*direction), obs, 1, cfg);
+minus = wust_oracle(1./(1./initial-step*direction), obs, 1, cfg);
+finite_difference = (plus-minus)/(2*step);
+adjoint = sum(gradient(:).*direction(:));
+error = abs(finite_difference-adjoint)/max(abs(finite_difference),abs(adjoint));
+assert(error < tolerance, 'Discrete gradient failure: %.6g', error);
+fprintf('%s %s gradient relative error %.6g\n',cfg.backend,cfg.wavenumber,error);
+end
+
+function reject(call, identifier)
+rejected = false;
+try
+    call();
+catch err
+    rejected = strcmp(err.identifier, identifier);
+end
+assert(rejected, 'Expected %s', identifier);
+end
+
+function check_mex_boundary(backend)
 if strcmp(backend,'gpu')
     rhs=gpuArray(complex(zeros(2,2,'single')));
     diagonal=gpuArray(complex(zeros(2,1,'single')));
@@ -28,51 +133,4 @@ if strcmp(backend,'gpu')
         assert(rejected,'MEX decomposition must validate storage before access');
     end
 end
-assert(isequal(ringingRemovalFilt(x,y,c,1500,1e5,0,4),c));
-filtered=ringingRemovalFilt(x,y,c,1500,1e5,.5,4);
-assert(all(isfinite(filtered(:))) && norm(filtered-c,'fro')>0);
-cfg=struct('backend',backend,'pml_m',.004,'pml_strength',10, ...
-    'stencil_bounds',[1400,1700],'wavenumber','continuum','source_batch_size',2, ...
-    'step_damping',.25,'max_update_mps',12,'bounds_mps',[1300,1800], ...
-    'filter_cutoff',0,'filter_order',4,'frequency_schedule_hz',[1e5,1e5,1.2e5,1.2e5],'update_mask',true(size(c)));
-cfg.update_mask([1:5,end-4:end],:)=false;cfg.update_mask(:,[1:5,end-4:end])=false;
-tx=sub2ind(size(c),[10,22,16],[8,23,25]).';rx=sub2ind(size(c),[8,15,23,18],[13,24,15,8]).';
-obs=struct('x_m',x,'y_m',y,'tx_index',tx,'rx_index',rx, ...
-    'frequencies_hz',[.1e6,.12e6],'fourier_sign',-1,'mask',true(3,4,2));
-src=zeros([size(c),3]);for j=1:3,src(tx(j)+(j-1)*numel(c))=1;end
-for k=1:2
-    s=HelmholtzSolver(x,y,c,zeros(size(c)),obs.frequencies_hz(k),-1,10,.004,struct('stencil_bounds',[1400,1700],'backend',backend));
-    u=s.solve(src,false);if isa(u,'gpuArray'),u=gather(u);end;u=reshape(u,[],3);
-    obs.Y(:,:,k)=u(rx,:).';
-end
-obs=wust_test_measurements(obs);
-% Setup must not change the backend of an already constructed solver.
-wust_setup('cpu');
-repeat = s.solve(src, false);
-assert(isa(repeat, 'gpuArray') == strcmp(backend, 'gpu'));
-initial=1500*ones(size(c));
-[loss,g]=wust_oracle(initial,obs,1,cfg);
-direction=exp(-((X-.002).^2+(Y+.003).^2)/2e-5).*cfg.update_mask;direction=direction*1e-6;
-h=1e-3;
-if strcmp(backend,'gpu'),h=.1;end % complex-single LU needs a resolvable finite difference
-lp=wust_oracle(1./(1./initial+h*direction),obs,1,cfg);
-lm=wust_oracle(1./(1./initial-h*direction),obs,1,cfg);
-fd=(lp-lm)/(2*h);ad=sum(g(:).*direction(:));err=abs(fd-ad)/max(abs(fd),abs(ad));
-if strcmp(backend,'cpu'),tolerance=1e-4;else,tolerance=0.03;end
-assert(err<tolerance,'Discrete gradient failure: %.6g',err);
-fprintf('%s discrete projected gradient relative error %.6g\n',backend,err);
-% Independent TX batching must not change loss or gradient.
-cfg2=cfg;cfg2.source_batch_size=3;[l2,g2]=wust_oracle(initial,obs,1,cfg2);
-assert(abs(l2-loss)/max(loss,eps)<1e-4 && norm(g2-g,'fro')/norm(g,'fro')<1e-4,'Batch mismatch');
-result=wust_reconstruct(obs,initial,cfg);assert(all(isfinite(result.c_mps(:))));
-final=wust_oracle(result.c_mps,obs,1,cfg);assert(final<loss,'Tiny training case did not improve');
-fprintf('%s tiny FWI loss %.6g -> %.6g\n',backend,loss,final);
-% Exact LDR9 derivative using explicit simulation metadata.
-cfg.wavenumber='kwave-ldr9';cfg.dispersion=struct('time_step_s',2e-8, ...
-    'reference_speed_mps',1700,'model_reference_speed_mps',1500);
-[~,g]=wust_oracle(initial,obs,1,cfg);
-lp=wust_oracle(1./(1./initial+h*direction),obs,1,cfg);
-lm=wust_oracle(1./(1./initial-h*direction),obs,1,cfg);
-fd=(lp-lm)/(2*h);ad=sum(g(:).*direction(:));err=abs(fd-ad)/max(abs(fd),abs(ad));
-assert(err<tolerance,'LDR9 derivative failed');fprintf('%s LDR9 derivative error %.6g\n',backend,err);
 end

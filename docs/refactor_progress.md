@@ -160,3 +160,43 @@ Next: finish BenchLab P4 public configuration and continue P5 numerical modules.
 
 Next: P6 consolidates maintained tests and current user documentation, then runs
 installation and the complete cross-repository acceptance on A100.
+
+## P6: readable runtime, one fixture and final gates
+
+Implemented: readable slowness update loop and MATLAB tests, a shared coherent
+fixture with separate preparation/reconstruction timing, explicit single-backend
+probe, normal Python native imports, and current English/Chinese runtime docs.
+The full-size native validator is archived; the asymmetric three-TX/four-RX
+MATLAB/native test is the maintained hardware gate. Removed duplicate batch test
+and export fixture. The source-scale rejection and mathematical references remain.
+
+Validation on A100 (MATLAB R2021b, CUDA 11.4 build, A100-SXM4-80GB):
+
+| Gate | Actual result |
+| --- | --- |
+| Python transport/native tests | 17 passed (1.19 s); also pass locally |
+| CPU continuum / LDR9 directional derivative | 3.46637e-10 / 1.97022e-10 relative error |
+| GPU continuum / LDR9 directional derivative | 1.112e-3 / 4.30214e-4 relative error |
+| Four-update CPU loss | 3.88345e-17 -> 8.95907e-18 |
+| Four-update GPU loss | 3.88327e-17 -> 8.95982e-18 |
+| RF ingestion | Rectangular unequal-spacing geometry, reordered frequencies, conjugation, valid zero and masked missing data passed |
+| FIR decimation | Passband ratio 0.999878; aliased tone -72.39 dB |
+| Native versus independent serial MATLAB | RF relative L2 1.7749e-6; frequency relative L2 8.0549e-7, both below 1e-4 |
+| BenchLab CPU/GPU protocol | One reconstruct process each; same 23x27 fixture, two updates of a three-entry schedule; passed |
+| Teaching pipeline | 32x32 MATLAB k-Wave simulation -> FIR -> DTFT -> two-frequency CPU FWI; finite result saved, process exit 0 |
+
+CPU/GPU mathematical commands exited 0. The native comparison initially printed
+its successful report but returned 255 during batch exit; repeating the same gate
+with explicit exit(0) after all assertions confirmed MATLAB exit code 0. The final
+native report is /tmp/usct_refactor_p6_native_exit/report.json. No server startup
+or unrelated job was modified. Eight obsolete sync residues were moved by exact
+path into the isolated A100 research archive before rerunning Python discovery.
+
+Black (10 Python files), Ruff and git diff --check pass. Regenerating all seven
+schemas produces no diff. No tracked data arrays, compiled outputs or files over
+2 MB. Original histories, research material and observations remain preserved.
+
+P1-P6 is complete at the declared small numerical/interface validation scope.
+Next: maintainer review of the two local branches. Larger acquisition performance
+and clinical validity are not established by these gates. No remote push or merge
+has been performed as part of this refactor.

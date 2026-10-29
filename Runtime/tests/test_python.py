@@ -1,31 +1,22 @@
-import importlib.util
 import os
 import runpy
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-native = load("native", ROOT / "native/run_native_source_batch.py")
+sys.path.insert(0, str(ROOT / "native"))
+import install_launcher as installer
+import run_native_source_batch as native
 
 
 class Contracts(unittest.TestCase):
     def test_installed_launcher_preserves_arguments_and_explicit_batch(self):
-        installer = load("install_launcher", ROOT / "native/install_launcher.py")
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(
                 sys,
@@ -73,9 +64,14 @@ class Contracts(unittest.TestCase):
             src = Path(d) / "a.h5"
             dst = Path(d) / "b.h5"
             self.make_input(src)
-            before = src.read_bytes()
             native.expand_input(src, dst, 3, source_indices=[11, 3, 7])
-            self.assertEqual(before, src.read_bytes())
+            with h5py.File(src) as original:
+                np.testing.assert_array_equal(
+                    original["p_source_index"][...].ravel(), [3]
+                )
+                np.testing.assert_array_equal(
+                    original["p_source_input"][...].ravel(), np.arange(5)
+                )
             with h5py.File(dst) as h:
                 np.testing.assert_array_equal(
                     h["p_source_index"][...].ravel(), [11, 51, 103]

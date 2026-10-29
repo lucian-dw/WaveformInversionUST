@@ -26,3 +26,10 @@ Browse the [local archive](../../research_archive/WaveformInversionUST/).
 The former experimental block-LU macro variants and free-b stencil fitting are
 preserved at the same relative paths under Runtime/solver in that archive.
 The maintained solver uses pivoted inverse pages and fixed b=5/6.
+
+## Full-size native validation
+
+The former Runtime/native/validate_native.py is preserved at the same relative
+path in the sibling research_archive/WaveformInversionUST tree. It is a full-size
+performance/research campaign; current hardware correctness uses
+Runtime/tests/test_native_pipeline.m with explicit device and asymmetric TX/RX.

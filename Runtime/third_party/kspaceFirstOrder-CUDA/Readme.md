@@ -1,3 +1,10 @@
+# Maintained WUST fork
+
+This directory retains upstream source and LGPL notices. WUST adds independent
+2-D TX batching, explicit source/index handling and controlled error propagation.
+Current build instructions, CUDA_ARCH and supported native physics are maintained
+in [Runtime deployment](../../README.md), not the historical instructions below.
+
 ## Overview
 
 k-Wave is an open source MATLAB toolbox designed for the time-domain simulation

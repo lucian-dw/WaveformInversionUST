@@ -1,108 +1,81 @@
-# WUST runtime guide
+# Runtime deployment
 
-Standalone runtime for a thin external adapter. No dependency on
-`openbreastus_diffusion`, `kwave_dps`, PyTorch, or usct-benchlab.
-Original upstream scripts are unchanged. Add only `Runtime/matlab` to MATLAB;
-do NOT use `addpath(genpath(repo))`, which mixes reference and runtime solvers.
+## Dependencies and backends
 
-The algorithm is frequency-continuation **FWI**; Block-LU is its Helmholtz solver.
-Supported: 2D, sound-speed inversion, fixed zero attenuation.
+- Python 3.10+, NumPy and h5py: protocol transport and process ownership.
+- MATLAB: CPU sparse Helmholtz reference solver.
+- Parallel Computing Toolbox and supported CUDA MEX compiler: GPU Block LU.
+- Signal Processing Toolbox: anti-aliased RF decimation.
+- External k-Wave toolbox: simulation only.
 
-## Entry points
+Backend selection is explicit; GPU failures do not silently fall back to CPU.
+Each HelmholtzSolver owns its backend. wust_setup changes paths, not global backend state.
 
-| Operation | MATLAB | External input schema |
-|---|---|---|
-| Generate RF | `rf=wust_simulate(model,cfg)` | `wust.simulation_input` |
-| RF → frequencies | `obs=wust_prepare(rf,cfg)` | `wust.rf` |
-
-RF preparation requires `cfg.grid` with `shape_yx`, `spacing_yx_m`,
-`origin_yx_m` and `origin_kind="pixel_edge"`. Sampling times retain their actual
-origin. Decimation uses a positive integer factor and delay-compensated
-polyphase FIR; there is no stride-only or nominal-arrival window alias.
-`phase_correction` is explicitly `none` or `homogeneous-tof`.
-The Helmholtz backend belongs to each solver instance; `wust_setup` only adds
-maintained paths and checks the requested deployment, without changing globals.
-| Frequency ingestion | `obs=wust_prepare_observations(input)` | `wust.frequency_input` or `wust.measurements` |
-| FWI | `result=wust_reconstruct(obs,initial,cfg)` | `wust.measurements` + `wust.initial_model` |
-| Loss/gradient | `[loss,g,state]=wust_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
-
-Python (static discovery: standard library; batch arrays: NumPy/h5py):
-```sh
-python Runtime/python/wust_runtime.py describe --json
-python Runtime/python/wust_runtime.py run /absolute/request.json --matlab matlab --timeout-s 300
-```
-The [runtime contract](../docs/RUNTIME_API.md) defines JSON manifests and explicit
-HDF5 real/imag arrays and arrays-first result publication.
-The launcher supervises a bounded MATLAB process group. Logs/errors propagate;
-existing outputs are refused; no best-GT checkpoint selection.
-
-Executable examples: `../examples/simulate_and_reconstruct.m` for direct MATLAB simulation and
-`tests/integration_runtime.py` for the actual new external launcher.
-
-## Install and verify
-
-MATLAB; Signal Processing Toolbox for FIR; Parallel Computing Toolbox and a
-supported CUDA MEX compiler for GPU FWI. External k-Wave is needed only for simulation.
-No administrator installation or environment mutation is performed.
-```matlab
+~~~matlab
 addpath('Runtime/matlab');
+wust_build_mex;
+~~~
+
+Normal Python checks do not start MATLAB:
+
+~~~bash
+python -m unittest discover -s Runtime/tests -p 'test_*.py'
+~~~
+
+Explicit numerical gates:
+
+~~~matlab
 addpath('Runtime/tests');
 test_runtime('cpu');
+test_ingest_frequency;
 test_resampling;
-```
-
-Optional GPU and simulation checks (install their dependencies first):
-
-```matlab
-wust_build_mex;
+% After building CUDA MEX:
 test_runtime('gpu');
-addpath('examples');
-simulate_and_reconstruct('/tmp/wust-example');
-```
-Native HDF5 wrapper tests:
-```sh
-python -m pip install numpy h5py
-python Runtime/tests/test_python.py
-```
+~~~
 
-## Native128 generation (Linux GPU)
+The same CPU/GPU test checks continuum/LDR9 gradients, source batching, a small
+FWI update and schedule/zero/truncation semantics. See [API](../docs/RUNTIME_API.md)
+for the one-process reconstruction protocol.
 
-Modified **LGPL-3.0-or-later** source is included under
-`third_party/kspaceFirstOrder-CUDA`; preserve its notices.
-This is 128 independent TX wavefields with rank-2 cuFFT planMany, NOT simultaneous
-physical excitation in one wavefield.
+## Optional native simulation (Linux CUDA)
 
-From repository root:
-```sh
-make -C Runtime/third_party/kspaceFirstOrder-CUDA -j4 \
-  CUDA_DIR=/path/to/cuda HDF5_DIR=/path/to/hdf5 \
+The maintained native-batch backend propagates independent TX wavefields with
+shared medium and rank-2 batched FFTs. TX and RX may have different ordered
+positions. It is not simultaneous physical excitation. Supported medium is 2-D,
+linear, scalar-density and zero absorption. Unsupported flags fail explicitly.
+
+~~~bash
+make -C Runtime/third_party/kspaceFirstOrder-CUDA -j4 all \
+  CXX=/path/to/cuda/bin/nvcc CUDA_DIR=/path/to/cuda HDF5_DIR=/path/to/hdf5 \
   CUDA_ARCH='--generate-code arch=compute_80,code=sm_80'
-python Runtime/native/install_launcher.py \
-  --batch-size 128 \
+python Runtime/native/install_launcher.py --batch-size 3 \
   --binary /absolute/path/to/kspaceFirstOrder-CUDA \
-  --directory /absolute/path/to/new-wrapper-directory \
+  --directory /absolute/new/launcher \
   --library-dir /path/to/hdf5/lib --library-dir /path/to/cuda/lib64
-```
-Set simulation `backend='native128'`, explicit `binary_path` (wrapper directory)
-and zero-based `device_num`. Ordered TX and RX must be the same 128 grid indices.
-Supported physics: scalar density, linear propagation, zero absorption, 2D.
-Unsupported HDF5 flags fail closed. PML is outside the caller grid.
-The library directories are important: k-Wave clears LD_LIBRARY_PATH when it
-launches external binaries. The wrapper restores only the explicitly configured
-directories. The Makefile also passes CUDA_ARCH at device-link time, not just
-compilation; omitting it can yield a binary without the target GPU kernels.
-RF and HDF5 intermediates are retained. Use an explicit disk work directory.
+~~~
 
-A100 80 GB is the intended full native128 target. Check RAM/VRAM before full jobs:
-the generation output cube is still resident; FIR processes one TX at a time.
-FWI source_batch_size controls RHS batching independently, but virtual sources
-remain cached for the linearized step. No OOM fallback, GPU scheduler or automatic
-/dev/shm allocation is hidden in this runtime.
+Use a CUDA toolkit compatible with the installed driver/GPU. The caller chooses
+batch size, device_num and work_directory; no global CUDA installation, hidden
+scheduler or automatic RAM-disk allocation is performed. k-Wave clears its
+child library path, so the launcher restores only the declared library folders.
 
-- [Contracts](../docs/CONTRACTS.md)
-- [中文管线总结](../docs/PIPELINE_ZH.md)
-- [Attribution and licenses](../ATTRIBUTION.md)
-- [Historical validation](../docs/research_index.md)
+Simulation config uses backend='native-batch', binary_path pointing to the
+launcher directory and an explicit zero-based device_num. Each TX source is
+scaled with its own local speed using k-Wave's pressure-source convention.
+PML is outside the supplied grid. RF intermediates are retained in the requested
+work directory. Budget disk/RAM/VRAM before larger runs.
 
-Runtime/VERSION is the software version authority. Protocol versions are separate
-integers. BenchLab calls the same protocol-2 reconstruction operation as other callers.
+The maintained hardware correctness gate uses 3 unordered TX and 4 RX on a
+non-square heterogeneous grid, comparing against MATLAB k-Wave:
+
+~~~matlab
+addpath('/path/to/k-Wave');
+addpath('Runtime/tests');
+test_native_pipeline('/absolute/new/launcher', '/absolute/new/native-check', 0);
+~~~
+
+Full-size performance campaigns are in [research archive](../docs/research_index.md).
+When running this gate with MATLAB -batch, append exit(0) after the test to make
+successful batch termination explicit; assertion failures still abort before it.
+[examples](../examples/simulate_and_reconstruct.m) demonstrates explicit simulation,
+RF preparation and reconstruction; it is not a required CI stage.

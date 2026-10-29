@@ -24,7 +24,8 @@ python Runtime/python/wust_runtime.py run /absolute/request.json \
   --matlab /path/to/matlab --timeout-s 300
 ```
 
-Optional `describe --probe` checks host availability explicitly. Logs go to stderr;
+Optional `describe --probe --backend cpu` checks only the requested backend
+explicitly; use `--backend gpu` for CUDA MEX. Logs go to stderr;
 stdout is one JSON result. Each invocation has a separate run directory. Input
 paths must remain stable during execution. Arrays close before the successful
 manifest is published. Failed runs retain their request/partial artifacts and a
@@ -47,7 +48,7 @@ separate failure record; they do not publish a success index.
     "backend": "cpu",
     "bounds_mps": [1300, 1800],
     "stencil_bounds": [1400, 1700],
-    "pml_m": 0.003,
+    "pml_m": 0.004,
     "pml_strength": 10,
     "max_update_mps": 12,
     "step_damping": 0.25,
@@ -64,6 +65,11 @@ omission means each canonical frequency once; an empty list means no updates.
 Explicit repetitions repeat updates. MATLAB maps exact Hz values after preparing
 observations and then truncates by `max_updates`. Null/omitted budget leaves the
 plan intact; zero performs no updates. `save_history` defaults to false.
+
+For an already canonical input, use the same request with input_manifest pointing
+to a wust.measurements artifact. No other reconstruction field changes. An
+independent ingest_frequency request is needed only when saving reusable canonical
+observations, not before every reconstruct call.
 
 Speed bounds are positive and ordered. PML and maximum speed update are in m and
 m/s. Batch size and filter order are positive integers. The dimensionless positive
@@ -133,3 +139,10 @@ The manual integration shares a coherent non-square fixture with BenchLab's
 MATLAB numerical tests cover source-scale-projected gradients, batching,
 resampling, axes, zero observations, budgets and failures. GPU/native acceptance
 is explicit and separate from normal Python tests.
+
+Fixture preparation and formal reconstruction each launch MATLAB once and have
+separate wall-time fields. The latter includes preparation of the supplied
+frequency input plus two model updates in that same process.
+Pass --fixture /absolute/existing/fixture-directory to reuse coherent.json and
+initial.json without generating observations again. Both this script and the
+BenchLab integration command accept it and report zero fixture invocations.

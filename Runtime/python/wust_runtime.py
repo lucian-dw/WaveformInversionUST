@@ -67,7 +67,9 @@ def capabilities():
     }
 
 
-def probe(matlab="matlab", timeout_s=60):
+def probe(matlab="matlab", timeout_s=60, backend="cpu"):
+    if backend not in {"cpu", "gpu"}:
+        raise ValueError("Probe backend must be cpu or gpu")
     number(timeout_s, "timeout_s")
     executable = shutil.which(matlab)
     if not executable:
@@ -79,7 +81,7 @@ def probe(matlab="matlab", timeout_s=60):
         }
     with tempfile.TemporaryDirectory(prefix="wust-probe-") as folder:
         output = Path(folder) / "probe.json"
-        expression = f"s=settings; addpath({quote(ROOT/'Runtime/matlab')}); wust_probe({quote(output)});"
+        expression = f"s=settings; addpath({quote(ROOT/'Runtime/matlab')}); wust_probe({quote(output)},{quote(backend)});"
         try:
             execute([executable, "-batch", expression], timeout_s)
             return read_json(output)
@@ -96,6 +98,8 @@ def run(request_path, matlab="matlab", timeout_s=None, kwave_toolbox_path=None):
     started = time.monotonic()
     req = validate_request(read_json(Path(request_path).resolve(strict=True)))
     number(timeout_s, "timeout_s")
+    if timeout_s is None:
+        raise ValueError("An explicit timeout_s is required")
     for key in ("input_manifest", "output_manifest", "initial_manifest"):
         if key in req and (
             not isinstance(req[key], str) or not Path(req[key]).is_absolute()
@@ -182,6 +186,7 @@ def main():
     describe.add_argument("--probe", action="store_true")
     describe.add_argument("--matlab", default="matlab")
     describe.add_argument("--timeout-s", type=float, default=60)
+    describe.add_argument("--backend", choices=("cpu", "gpu"), default="cpu")
     run_parser = commands.add_parser("run")
     run_parser.add_argument("request")
     run_parser.add_argument("--matlab", default="matlab")
@@ -192,7 +197,7 @@ def main():
         if args.command == "describe":
             result = capabilities()
             if args.probe:
-                result["environment"] = probe(args.matlab, args.timeout_s)
+                result["environment"] = probe(args.matlab, args.timeout_s, args.backend)
         else:
             result = run(
                 args.request, args.matlab, args.timeout_s, args.kwave_toolbox_path

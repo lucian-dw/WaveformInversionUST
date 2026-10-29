@@ -1,81 +1,78 @@
 # Numerical contracts
 
-For the external JSON/HDF5 API, schemas and admission rules, see
-[Runtime API](RUNTIME_API.md). This document describes the underlying numerical model.
+## Layout
 
-## Ownership and axes
+| Quantity | WUST convention |
+| --- | --- |
+| Sound speed / update mask | [y,x], m/s / boolean |
+| Grid | shape_yx, spacing_yx_m, origin_yx_m at outer pixel edge |
+| TX/RX positions | [element,xy], meters |
+| Sampling indices | MATLAB one-based column-major |
+| RF | [time,rx,tx], time_s in seconds including its actual origin |
+| Canonical spectrum / mask | [tx,rx,frequency] |
+| Frequencies | distinct positive Hz, sorted during preparation |
+| Transform | $\Delta t\sum p(t)e^{-2\pi ift}$ |
+| Schedule input | physical Hz entries, repetitions are explicit |
 
-The caller owns anatomy selection, ROI, crop/resize, labels, normalization,
-splits and metrics. Supply the final physical computational grid. There is no
-300→256, intermediate 480, automatic water padding or image transpose.
+WUST owns snapping, frequency sorting and conjugation. Nearest-grid ties choose
+the first index; same-array elements collapsing to one sample are rejected.
+Invalid samples are masked before arithmetic; valid zeros remain data.
+There is no implicit crop, resize, nominal circular geometry or water padding.
 
-- c_mps: [Ny,Nx], metres/second. x_m indexes columns; y_m indexes rows.
-- Physical positions: [N,2], x,y in metres.
-- tx_index/rx_index: MATLAB 1-based column-major linear indices.
-- RF pressure: [T,RX,TX]. time_s includes the source pulse offset.
-- Complex Y and boolean mask: [TX,RX,F].
-- frequencies_hz: increasing positive Hz. RF preparation checks saved Nyquist;
-  direct frequency ingestion does not invent an unavailable time-sampling rate.
-- DTFT: sum RF(t)*exp(-2*pi*i*f*t)*dt. Helmholtz sign is -1.
-- Schedule: 1-based frequency indices, repeated for each desired update.
-- Snapped TX/RX coordinates are recorded. Merged elements fail.
-- k-Wave's first spatial axis explicitly maps to physical y.
-- No nominal circular array is substituted for the actual grid positions.
+## Prepared data
 
-## Preparation
+RF decimation uses delay-compensated polyphase FIR; factor one preserves samples.
+The actual saved time axis determines the DTFT. An optional homogeneous-tof
+phase correction accounts approximately for snapped versus physical distances;
+it is not exact heterogeneous propagation. Source onset is not inferred by
+resetting acquisition time to zero.
 
-Factor 2 uses the archived Kaiser FIR/polyphase: half-length 24, beta 8.6,
-delay compensated. Factor 1 keeps samples. Stride exists only in the archived
-helper for audit tests; it is not exposed by simulation. Nyquist alone does not
-guarantee spatial/time accuracy: choose grid, CFL and duration for the bandwidth.
+## Source-projected objective
 
-window='none' or 'legacy-nominal' (Gaussian early-arrival taper, width 5% of max
-homogeneous travel time, infinite late tail).
-phase_correction='none' or 'homogeneous-tof':
-exp(-i*2*pi*f*(distance_snapped-distance_actual)/c_geom).
-This is an approximate homogeneous correction, not exact heterogeneous physics.
+For each frequency, real slowness $s=1/c$ parametrizes the Helmholtz system.
+For admitted receivers and each TX,
 
-Caller supplies the mask. Historical near-neighbour rejection / percentile
-outlier removal must be explicit caller policies; zeros are not silently
-treated as missing observations. prepare_config is stored in the MAT input.
+$$
+a^\star=\frac{p^Hd}{p^Hp},\qquad
+\Phi_\omega(s)=\frac12\sum_{\rm TX}\|a^\star p(s)-d\|_2^2 .
+$$
 
-## FWI
+At least two valid receivers per scheduled TX/frequency are required. Source-scale
+elimination removes a scalar amplitude/phase, not arbitrary receiver distortion.
+Its derivative drops out of the gradient by stationarity of the eliminated scale.
 
-Loss: 1/2 sum_TX ||mask*(a_TX * P H(c)^-1 q_TX - Y_TX)||².
-Complex source scale a=(p* d)/(p* p) is analytically eliminated on included RX.
-It removes scalar source amplitude/phase, not angle-dependent multipath.
-The envelope theorem avoids differentiating a separately.
+The optimized stencil is $H=K+M_{\rm mass}\operatorname{diag}(\mathrm{PML}\,q(s))$.
+The virtual source uses the full mass stencil; the adjoint applies its conjugate
+transpose. Stencil speed bounds remain frozen while differentiating.
 
-Real slowness s=1/c is optimized, with zero attenuation, nine-point stencil/PML.
-Frozen stencil_bounds are required: otherwise stencil-coefficient optimization
-would change while differentiating the medium.
+Continuum uses $q=(2\pi f/c)^2$. kwave-ldr9 additionally requires explicit original
+simulator time_step_s, reference_speed_mps and model_reference_speed_mps. They
+cannot be inferred from decimated RF or clinical data.
 
-continuum uses (2*pi*f/c)^2. kwave-ldr9 requires explicit dispersion.time_step_s,
-reference_speed_mps and model_reference_speed_mps. dt is the ORIGINAL simulator
-dt, not decimated RF dt. Never infer these synthetic metadata from real RF.
+## Update and schedule
 
-This runtime uses the exact derivative of the assembled optimized mass stencil:
-H=K+M_mass diag(PML*q(c)).
-The perturbation source is M_mass(v*delta_s); backprojection applies M_mass*
-to the adjoint. Historical pointwise-only virtual sources omit off-diagonals.
-Therefore this release is NOT claimed bitwise identical to every historical
-experiment. Original upstream scripts remain unchanged for comparison.
+The loop restarts nonlinear CG at frequency changes, uses clipped PR/FR beta,
+then a linearized curvature step with frozen source scale. Damping, a speed-step
+cap, bounds and an update mask constrain the candidate. Optional ringing removal
+filters the gradient. This is not monotone line-search FWI and adds no explicit
+quadratic image regularizer.
 
-NCG: clipped PR/FR beta, per-frequency restart, one linearized quadratic step,
-explicit damping, velocity step cap, bounds and update mask.
-It is not monotone line-search FWI, O0/PSPA, or attenuation inversion.
-Linearized curvature freezes source scale, as in the reference method.
-There are no hidden trial forwards.
+A null/omitted schedule means each canonical frequency once. The complete Hz plan
+is resolved first, then truncated by max_updates. Every entry is one model update.
+Each loss belongs to the **pre-update model at that entry's frequency**.
+A final-model residual is null unless explicitly computed; this runtime does not
+compute one.
 
-Records include assembly+factor time, forward/adjoint/linearized time, RHS counts,
-one fresh factorization per update. Residuals are BEFORE update. Selection is
-final, never best-GT. CPU double vs GPU complex-single is explicit; GPU failures
-do not silently fall back. Caller controls GPU visibility/selection.
+Schedule completion is completion, not convergence. The runtime supports update
+count and a hard elapsed deadline; it rejects numerical stopping thresholds and
+forward/adjoint caps. Relative slowness update is a diagnostic over the update
+mask, normalized by the previous full-slowness norm.
 
-## Output integrity
+## Transport and ownership
 
-Batch results use explicit HDF5 arrays and a JSON success manifest published last.
-Use unique output paths for parallel calls; no distributed lock is supplied.
-Requests are trusted local configuration, not a sandbox for untrusted inputs.
-Outputs record config, timings, MATLAB/runtime/source identities and input hashes.
-Caller must still retain an approved Git pin and scientific acquisition provenance.
+Python owns JSON/HDF5 paths and MATLAB process groups. MATLAB owns physical
+preparation and numerical state. Arrays close before the success manifest is
+published; failure leaves partial artifacts and a separate failure record.
+Use separate output directories for concurrent calls. Runtime/VERSION identifies
+software; protocol version 2 identifies the transport. No source identity gate is
+required. [API](RUNTIME_API.md) defines exact fields.

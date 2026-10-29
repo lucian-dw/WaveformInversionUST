@@ -6,6 +6,7 @@ Fixture generation is separate from reconstruction and never a production path.
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -70,7 +71,9 @@ def create_fixture(folder, matlab):
     output = folder / "coherent.json"
     expression = (
         f"s=settings; addpath({quote(ROOT/'Runtime/tests')}); "
-        f"export_integration_fixture({quote(folder/'input.json')},{quote(output)});"
+        f"addpath({quote(ROOT/'Runtime/matlab')}); "
+        f"input=wust_read_artifact({quote(folder/'input.json')},'wust.frequency_input'); "
+        f"wust_test_measurements(input,'cpu',[],{quote(output)});"
     )
     execute([matlab, "-batch", expression], 180)
     initial = np.full((23, 27), 1500.0)
@@ -95,7 +98,7 @@ def numerical_config(backend="cpu"):
         "step_damping": 0.25,
         "source_batch_size": 2,
         "pml_strength": 10,
-        "pml_m": 0.003,
+        "pml_m": 0.004,
         "stencil_bounds": [1400, 1700],
         "wavenumber": "continuum",
         "filter_cutoff": 0,
@@ -123,15 +126,24 @@ def main():
     parser.add_argument("--matlab", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--backend", choices=["cpu", "gpu"], default="cpu")
+    parser.add_argument(
+        "--fixture", type=Path, help="Reuse a prepared coherent fixture directory"
+    )
     args = parser.parse_args()
     folder = args.out.resolve()
-    fixture = create_fixture(folder, args.matlab)
+    prepared = time.monotonic()
+    if args.fixture is None:
+        fixture = create_fixture(folder, args.matlab)
+    else:
+        folder.mkdir(parents=True, exist_ok=False)
+        fixture = args.fixture.resolve() / "coherent.json"
+    preparation_seconds = time.monotonic() - prepared
     request = {
         "schema": "wust.request",
         "schema_version": 2,
         "operation": "reconstruct",
         "input_manifest": str(fixture),
-        "initial_manifest": str(folder / "initial.json"),
+        "initial_manifest": str(fixture.parent / "initial.json"),
         "output_manifest": str(folder / "result.json"),
         "config": numerical_config(args.backend),
         "frequency_schedule_hz": [1e5, 1e5, 1.2e5],
@@ -139,7 +151,9 @@ def main():
     }
     path = folder / "request.json"
     path.write_text(json.dumps(request))
+    started = time.monotonic()
     run(path, args.matlab, timeout_s=180)
+    reconstruction_seconds = time.monotonic() - started
     doc, arrays = read_artifact(folder / "result.json", "wust.reconstruction")
     check_reconstruction(doc["metadata"], arrays["c_mps"], backend=args.backend)
     assert "history_mps" not in arrays
@@ -147,7 +161,9 @@ def main():
         json.dumps(
             {
                 "passed": True,
-                "fixture_matlab_invocations": 1,
+                "fixture_preparation_seconds": preparation_seconds,
+                "reconstruction_seconds": reconstruction_seconds,
+                "fixture_matlab_invocations": int(args.fixture is None),
                 "reconstruction_matlab_invocations": 1,
                 "backend": args.backend,
             }
