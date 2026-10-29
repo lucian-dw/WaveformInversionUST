@@ -122,6 +122,7 @@ class IndexMatrix : public BaseIndexMatrix
   protected:
 
   private:
+    bool mZeroBased = false;
     /// Init dimension.
     void initDimensions(const DimensionSizes& dimensionSizes);
     /// Number of elements to get 8MB block of data.

@@ -156,7 +156,7 @@ void Parameters::init(int argc, char** argv)
 {
   mCommandLineParameters.parseCommandLine(argc, argv);
 
-  if (mCommandLineParameters.isPrintVersionOnly())
+  if (mCommandLineParameters.isPrintVersionOnly() || mCommandLineParameters.isPrintHelpOnly())
   {
     return;
   }

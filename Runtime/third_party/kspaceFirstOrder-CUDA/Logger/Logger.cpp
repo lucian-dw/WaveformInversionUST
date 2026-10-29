@@ -80,17 +80,6 @@ void Logger::error(const string& errorMessage)
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
- * Log an error and terminate the execution.
- */
-void Logger::errorAndTerminate(const string& errorMessage)
-{
-  error(errorMessage);
-
-  exit(EXIT_FAILURE);
-}// end of errorAndTerminate
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
  * Flush logger, output messages only.
  */
 void Logger::flush(const LogLevel queryLevel)

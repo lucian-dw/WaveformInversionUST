@@ -257,6 +257,7 @@ class Parameters
      * @return true if the flag is set.
      */
     bool isPrintVersionOnly() const { return mCommandLineParameters.isPrintVersionOnly(); };
+    bool isPrintHelpOnly() const { return mCommandLineParameters.isPrintHelpOnly(); };
 
     /**
      * @brief   Read scalar values from the input HDF5 file.

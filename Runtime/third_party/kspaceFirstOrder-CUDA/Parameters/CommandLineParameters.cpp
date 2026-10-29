@@ -45,12 +45,28 @@
 
 #include <cstring>
 #include <stdexcept>
+#include <limits>
 
 #include <Logger/Logger.h>
 #include <Parameters/CudaParameters.h>
 #include <Parameters/CommandLineParameters.h>
 
 using std::string;
+
+namespace
+{
+long long parseInteger(const char* text, long long minimum,
+                       long long maximum = std::numeric_limits<long long>::max())
+{
+  if (text == nullptr || *text == '\0')
+    throw std::invalid_argument("Missing integer");
+  size_t consumed = 0;
+  const long long value = std::stoll(text, &consumed);
+  if (consumed != std::strlen(text) || value < minimum || value > maximum)
+    throw std::invalid_argument("Integer outside range or trailing characters");
+  return value;
+}
+}
 
 //--------------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------- Public methods ---------------------------------------------------//
@@ -217,7 +233,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
     constexpr int kErrorLineIndent = 9;
 
     printUsage();
-    Logger::errorAndTerminate(Logger::wordWrapString(message, " ", kErrorLineIndent));
+    throw std::invalid_argument(Logger::wordWrapString(message, " ", kErrorLineIndent));
   }; // end of reportError
 
 
@@ -229,7 +245,8 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       case kHelp:
       {
         printUsage();
-        exit(EXIT_SUCCESS);
+        mPrintHelpFlag = true;
+        return;
       }
 
       case kInputFileName:
@@ -266,12 +283,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          int convertedValue = std::stoi(optarg);
-          if ((convertedValue < 1) || (convertedValue > 100))
-          {
-            throw std::invalid_argument("-r");
-          }
-          mProgressPrintInterval = std::stoll(optarg);
+          mProgressPrintInterval = parseInteger(optarg, 1, 100);
         }
         catch (...)
         {
@@ -285,11 +297,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          if (std::stoi(optarg) < 1)
-          {
-            throw std::invalid_argument("-t");
-          }
-          mNumberOfThreads = std::stoll(optarg);
+          mNumberOfThreads = parseInteger(optarg, 1, std::numeric_limits<int>::max());
         }
         catch (...)
         {
@@ -303,11 +311,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          mCudaDeviceIdx = std::stoi(optarg);
-          if (mCudaDeviceIdx < 0)
-          {
-            throw std::invalid_argument("-g");
-          }
+          mCudaDeviceIdx = parseInteger(optarg, 0, std::numeric_limits<int>::max());
         }
         catch (...)
         {
@@ -320,12 +324,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          int covertedValue = std::stoi(optarg);
-          if ((covertedValue < 0) || (covertedValue > 9))
-          {
-            throw std::invalid_argument("-c");
-          }
-          mCompressionLevel = std::stoll(optarg);
+          mCompressionLevel = parseInteger(optarg, 0, 9);
         }
         catch (...)
         {
@@ -338,11 +337,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          if (std::stoll(optarg) < 1)
-          {
-            throw std::invalid_argument("-s");
-          }
-          mSamplingStartTimeStep = std::stoll(optarg) - 1;
+          mSamplingStartTimeStep = parseInteger(optarg, 1) - 1;
         }
         catch (...)
         {
@@ -356,11 +351,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
         try
         {
           mBenchmarkFlag = true;
-          if (std::stoll(optarg) <= 0)
-          {
-            throw std::invalid_argument("benchmark");
-          }
-          mBenchmarkTimeStepCount = std::stoll(optarg);
+          mBenchmarkTimeStepCount = parseInteger(optarg, 1);
         }
         catch (...)
         {
@@ -396,11 +387,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
         try
         {
           checkpointFlag = true;
-          if (std::stoll(optarg) <= 0)
-          {
-           throw std::invalid_argument("checkpoint_interval");
-          }
-          mCheckpointInterval = std::stoll(optarg);
+          mCheckpointInterval = parseInteger(optarg, 1);
         }
         catch (...)
         {
@@ -414,11 +401,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
         try
         {
           checkpointFlag = true;
-          if (std::stoll(optarg) <= 0)
-          {
-           throw std::invalid_argument("checkpoint_timesteps");
-          }
-          mCheckpointTimeSteps = std::stoll(optarg);
+          mCheckpointTimeSteps = parseInteger(optarg, 1);
         }
         catch (...)
         {
@@ -431,11 +414,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
       {
         try
         {
-          int verboseLevel = std::stoi(optarg);
-          if ((verboseLevel < 0) || (verboseLevel > 2))
-          {
-            throw std::invalid_argument("verbose");
-          }
+          int verboseLevel = parseInteger(optarg, 0, 2);
           Logger::setLevel(static_cast<Logger::LogLevel> (verboseLevel));
         }
         catch (...)
@@ -637,7 +616,7 @@ void CommandLineParameters::parseCommandLine(int argc, char** argv)
     }
   }
 
-  if (mPrintVersionFlag) return;
+  if (mPrintVersionFlag || mPrintHelpFlag) return;
 
   // Post checks
   if (mInputFileName == "")
@@ -725,18 +704,7 @@ size_t CommandLineParameters::getDefaultNumberOfThreads()
 
     if (envNumberOfThreads != nullptr)
     {
-      // If exists and can be converted to long, use it. Otherwise, do nothing.
-      try
-      {
-        if (std::stoll(envNumberOfThreads) > 0)
-        {
-          nThreads = std::stoll(envNumberOfThreads);
-        }
-      }
-      catch (...)
-      {
-        // Do nothing
-      }
+      nThreads = parseInteger(envNumberOfThreads, 1, std::numeric_limits<int>::max());
     }
 
     return nThreads;

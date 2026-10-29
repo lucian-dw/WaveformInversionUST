@@ -117,11 +117,6 @@ class Logger
      */
     static void error(const std::string& errorMessage);
     /**
-     * @brief Log an error and terminate the execution.
-     * @param [in] errorMessage - Error message to be printed to stderr.
-     */
-    static void errorAndTerminate(const std::string& errorMessage);
-    /**
      * @brief Flush output messages.
      * @param [in] queryLevel - Log level of the flush.
      */

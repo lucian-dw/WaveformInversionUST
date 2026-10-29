@@ -298,6 +298,7 @@ class CommandLineParameters
      * @return true if the flag is set.
      */
     bool   isPrintVersionOnly()         const { return mPrintVersionFlag; };
+    bool   isPrintHelpOnly()            const { return mPrintHelpFlag; };
 
     //------------------------------------------------ Output flags --------------------------------------------------//
     /**
@@ -451,6 +452,7 @@ class CommandLineParameters
 
     /// Print version of the code and exit.
     bool mPrintVersionFlag;
+    bool mPrintHelpFlag = false;
 
     /// Store raw time-series of pressure over the sensor mask?
     bool mStorePressureRawFlag;

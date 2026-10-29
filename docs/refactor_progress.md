@@ -120,3 +120,22 @@ Next: P4 makes process ownership, sampling and backend selection explicit.
 
 Next: P4 native CLI/error ownership and BenchLab typed public configuration;
 P5 will simplify the solver constructor/options without changing its backend.
+
+## P4 unit 2: native entry and index ownership
+
+- Main now owns the failure exit; logger and solver layers propagate errors.
+  Help/version return before CUDA selection. Integer arguments are parsed once,
+  with complete-string and range checks, including OMP settings.
+- Index imports validate unique encoded indices against the explicit physical
+  grid/batch layout, ordered cuboid corners and one-based storage. Conversion
+  rejects repeated base changes. Inclusive cuboid capacity includes both ends.
+- A100 CUDA 11.4 rebuilt successfully. Help/version work with no visible GPU;
+  malformed integers, zero/duplicate/out-of-range indices and reversed corners
+  were rejected. A one-voxel cuboid emitted 100 finite time samples.
+- The first batch check exposed a physical-only range check; using the declared
+  batch layout corrected it. Repeated 3-TX serial/batch RF and DTFT comparisons
+  both gave relative L2 error 0. Results: /tmp/usct_refactor_p4_native_layout;
+  boundary logs: /tmp/usct_refactor_p4_boundaries. Required shared-library path
+  was supplied explicitly; no server-wide binaries or libraries were replaced.
+
+Next: finish BenchLab P4 public configuration and continue P5 numerical modules.

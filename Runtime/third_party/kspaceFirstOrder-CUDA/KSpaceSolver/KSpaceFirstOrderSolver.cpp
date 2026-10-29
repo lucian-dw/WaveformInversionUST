@@ -367,7 +367,7 @@ void KSpaceFirstOrderSolver::compute()
     Logger::log(Logger::LogLevel::kBasic, kOutFmtFailed);
     Logger::log(Logger::LogLevel::kBasic, kOutFmtLastSeparator);
 
-    Logger::errorAndTerminate(Logger::wordWrapString(e.what(),kErrFmtPathDelimiters, 9));
+    throw;
   }
 
   // Logger header for simulation
@@ -411,7 +411,7 @@ void KSpaceFirstOrderSolver::compute()
   catch (const std::exception& e)
   {
     Logger::log(Logger::LogLevel::kBasic, kOutFmtSimulatoinFinalSeparator);
-    Logger::errorAndTerminate(Logger::wordWrapString(e.what(),kErrFmtPathDelimiters, 9));
+    throw;
   }
 
   // Post processing phase
@@ -461,7 +461,7 @@ void KSpaceFirstOrderSolver::compute()
     Logger::log(Logger::LogLevel::kBasic, kOutFmtFailed);
     Logger::log(Logger::LogLevel::kBasic, kOutFmtLastSeparator);
 
-    Logger::errorAndTerminate(Logger::wordWrapString(e.what(), kErrFmtPathDelimiters,9));
+    throw;
   }
   mPostProcessingTime.stop();
 
@@ -476,7 +476,7 @@ void KSpaceFirstOrderSolver::compute()
   catch (const std::exception &e)
   {
     Logger::log(Logger::LogLevel::kBasic, kOutFmtLastSeparator);
-    Logger::errorAndTerminate(Logger::wordWrapString(e.what(), kErrFmtPathDelimiters, 9));
+    throw;
   }
 }// end of compute
 //----------------------------------------------------------------------------------------------------------------------

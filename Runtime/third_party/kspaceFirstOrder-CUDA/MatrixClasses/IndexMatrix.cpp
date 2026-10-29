@@ -31,6 +31,9 @@
 
 #include <MatrixClasses/IndexMatrix.h>
 #include <Logger/Logger.h>
+#include <Parameters/Parameters.h>
+#include <set>
+#include <stdexcept>
 
 //--------------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------- Public methods ---------------------------------------------------//
@@ -75,6 +78,34 @@ void IndexMatrix::readData(Hdf5File&         file,
 
   // Read data
   file.readCompleteDataset(file.getRootGroup(), matrixName, mDimensionSizes, mHostData);
+  mZeroBased = false;
+  if (matrixName == "sensor_mask_corners" || matrixName == "sensor_mask_index" ||
+      matrixName == "p_source_index" || matrixName == "u_source_index")
+  {
+    size_t nx, ny, nz;
+    file.readScalarValue(file.getRootGroup(), "Nx", nx);
+    file.readScalarValue(file.getRootGroup(), "Ny", ny);
+    file.readScalarValue(file.getRootGroup(), "Nz", nz);
+    if (matrixName == "sensor_mask_corners")
+    {
+      if (mSize % 6 != 0) throw std::invalid_argument("Cuboids require six coordinates");
+      const size_t limits[] = {nx, ny, nz};
+      for (size_t i = 0; i < mSize; i += 6)
+        for (size_t axis = 0; axis < 3; ++axis)
+          if (mHostData[i + axis] < 1 || mHostData[i + axis + 3] > limits[axis] ||
+              mHostData[i + axis] > mHostData[i + axis + 3])
+            throw std::invalid_argument("Invalid inclusive sensor cuboid");
+    }
+    else
+    {
+      // Native independent-TX inputs encode the batch offset in each index.
+      const size_t capacity = nx * ny * nz * Parameters::getInstance().getLayout().batchCount;
+      std::set<size_t> seen;
+      for (size_t i = 0; i < mSize; ++i)
+        if (mHostData[i] < 1 || mHostData[i] > capacity || !seen.insert(mHostData[i]).second)
+          throw std::invalid_argument("Spatial indices must be unique and inside the declared grid/batch layout");
+    }
+  }
 }// end of readData
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -159,11 +190,15 @@ DimensionSizes IndexMatrix::getBottomRightCorner(const size_t& index) const
  */
 void IndexMatrix::recomputeIndicesToCPP()
 {
+  if (mZeroBased) throw std::logic_error("Indices are already zero-based");
+  for (size_t i = 0; i < mSize; ++i)
+    if (mHostData[i] == 0) throw std::invalid_argument("Expected one-based indices");
   #pragma omp parallel for
   for (size_t i = 0; i < mSize; i++)
   {
     mHostData[i]--;
   }
+  mZeroBased = true;
 }// end of recomputeIndicesToCPP
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -172,11 +207,13 @@ void IndexMatrix::recomputeIndicesToCPP()
  */
 void IndexMatrix::recomputeIndicesToMatlab()
 {
+  if (!mZeroBased) throw std::logic_error("Indices are already one-based");
   #pragma omp parallel for
   for (size_t i = 0; i < mSize; i++)
   {
     mHostData[i]++;
   }
+  mZeroBased = false;
 }// end of recomputeIndicesToMatlab
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -188,7 +225,9 @@ size_t IndexMatrix::getSizeOfAllCuboids() const
   size_t elementSum = 0;
   for (size_t cuboidIdx = 0; cuboidIdx < mDimensionSizes.ny; cuboidIdx++)
   {
-    elementSum += (getBottomRightCorner(cuboidIdx) - getTopLeftCorner(cuboidIdx)).nElements();
+    const DimensionSizes first = getTopLeftCorner(cuboidIdx);
+    const DimensionSizes last = getBottomRightCorner(cuboidIdx);
+    elementSum += (last.nx - first.nx + 1) * (last.ny - first.ny + 1) * (last.nz - first.nz + 1);
   }
 
   return elementSum;
