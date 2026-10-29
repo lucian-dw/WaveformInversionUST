@@ -10,4 +10,5 @@ obs.tx_snapped_xy_m=obs.tx_xy_m;obs.rx_snapped_xy_m=obs.rx_xy_m;
 obs.schema='wust.measurements';obs.schema_version=2;
 obs.pressure_type='total_pressure';obs.data_units='unknown';obs.spectrum_normalization='unknown';
 obs.preparation=struct('measurement_provenance','numerical_fixture');
+obs=wust_prepare_observations(obs);
 end

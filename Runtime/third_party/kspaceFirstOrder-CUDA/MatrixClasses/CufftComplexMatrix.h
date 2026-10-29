@@ -44,7 +44,7 @@
  * @class   CufftComplexMatrix
  * @brief   Class implementing ND and 1D Real-To-Complex and Complex-To-Real transforms using cuFFT interface.
  * @details Class implementing a single ND (3D, 2D) and many 1D Real-To-Complex and Complex-To-Real transforms
- *          using FFTW interface.
+ *          using cuFFT interface.
  * \li If the matrix is 3D, the ND transform is 3D and the batch of 1D goes over the second and third dimension.
  * \li If the matrix is 2D, the ND transform is 2D and the batch of 1D goes over the second dimension.
 

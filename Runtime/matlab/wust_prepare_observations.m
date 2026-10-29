@@ -54,6 +54,11 @@ end
 obs = geo;
 obs.schema = 'wust.measurements'; obs.schema_version = 2;
 obs.Y = Y; obs.mask = mask; obs.frequencies_hz = sorted; obs.fourier_sign = -1;
+obs.shape_yx = [numel(geo.y_m),numel(geo.x_m)];
+obs.n_tx = nt;
+obs.n_rx = nr;
+obs.valid_receiver_counts = reshape(sum(mask,2),nt,nf);
+obs.frequency_data_norm = reshape(sum(sum(abs(double(Y)).^2,1),2),[],1);
 obs.grid = input.grid; obs.data_units = input.data_units;
 obs.spectrum_normalization = input.spectrum_normalization;
 obs.pressure_type = 'total_pressure';

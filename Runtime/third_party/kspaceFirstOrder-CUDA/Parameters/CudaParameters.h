@@ -83,7 +83,7 @@ class CudaParameters
      * @brief  Get grid size for the transposition kernels.
      * @return Number of blocks per grid.
      */
-    dim3 getSolverTransposeGirdSize()  const { return mSolverTransposeGirdSize; }
+    dim3 getSolverTransposeGridSize()  const { return mSolverTransposeGridSize; }
 
     /**
      * @brief  Get number of threads for the 1D data sampling kernels.
@@ -160,7 +160,7 @@ class CudaParameters
     /// Block size for the transposition kernels.
     dim3 mSolverTransposeBlockSize;
     /// Grid size for the transposition kernels.
-    dim3 mSolverTransposeGirdSize;
+    dim3 mSolverTransposeGridSize;
 
     /// Number of threads for the 1D data sampling kernels.
     int  mSamplerBlockSize1D;

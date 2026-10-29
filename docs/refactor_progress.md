@@ -139,3 +139,24 @@ P5 will simplify the solver constructor/options without changing its backend.
   was supplied explicitly; no server-wide binaries or libraries were replaced.
 
 Next: finish BenchLab P4 public configuration and continue P5 numerical modules.
+
+## P5: prepared numerical kernels and independent native comparison
+
+- Helmholtz instances own their backend/options. Oracle preparation caches geometry,
+  receiver counts and observation norms; the source-projected objective and exact
+  mass-stencil derivative are unchanged. Removed alternative LU branches and
+  archived the former source before simplifying the maintained CUDA path.
+- Native batch expansion now rescales each TX using its local sound speed, with
+  the same Dirichlet/additive formula as k-Wave's scaleSourceTerms. A heterogeneous
+  asymmetric fixture exposed the previous shared-source amplitude error.
+- A100: MATLAB CPU gradient FD 3.22e-10, LDR9 FD 1.82e-10; GPU gradient FD
+  1.11e-3, LDR9 FD 4.30e-4. Both backend tests completed with exit 0. Native CUDA
+  11.4 rebuild passed. The corrected 3-TX independent MATLAB/native comparison
+  reported RF error 1.77e-6 and spectral error 8.05e-7 (threshold 1e-4), with
+  report saved at /tmp/usct_refactor_p5_native_result_v3/report.json on A100.
+  That SSH/MATLAB session returned 255 after publishing the passing report;
+  P6 must repeat the maintained gate with a confirmed normal process exit.
+- Local Python: 17 passed, 10 subtests. git diff --check passed.
+
+Next: P6 consolidates maintained tests and current user documentation, then runs
+installation and the complete cross-repository acceptance on A100.

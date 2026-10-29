@@ -5,6 +5,8 @@ function rf=wust_simulate(model,cfg)
 % source_pressure [1,Nt], dt_s. Input is already on the COMPUTATIONAL grid.
 required={'backend','pml_size','density_kg_m3','sound_speed_ref_mps','downsample_factor','time_offset_s','work_dir'};
 for j=1:numel(required),assert(isfield(cfg,required{j}),['Missing ' required{j}]);end
+cfg.work_dir = char(cfg.work_dir);
+if isfield(cfg,'binary_path'), cfg.binary_path = char(cfg.binary_path); end
 assert(exist('kWaveGrid','class')==8,'Add the external k-Wave MATLAB toolbox to path');
 c=double(model.c_mps);[ny,nx]=size(c);x=double(model.x_m(:));y=double(model.y_m(:));
 assert(numel(x)==nx&&numel(y)==ny && all(isfinite(c(:))&c(:)>0),'Invalid medium');
@@ -30,29 +32,12 @@ common={'PMLInside',false,'PMLSize',cfg.pml_size,'PlotSim',false,'DataCast','sin
 if ~exist(cfg.work_dir,'dir'),mkdir(cfg.work_dir);end
 timer=tic;
 switch cfg.backend
-    case 'native128'
-        assert(nt==128&&nr==128&&isequal(tx,rx),'native128 requires ordered colocated 128 TX/RX');
-        assert(isfield(cfg,'binary_path')&&isfield(cfg,'device_num'),'Native binary_path/device_num required');
-        source.p_mask=zeros(ny,nx);source.p_mask(tx(1))=1;
-        [row,col]=ind2sub([ny,nx],tx);p=cfg.pml_size;
-        h5index=(row+p)+(col+p-1)*(ny+2*p);
-        old=getenv('KWAVE_NATIVE_TX_INDICES_H5');cleanup=onCleanup(@()setenv('KWAVE_NATIVE_TX_INDICES_H5',old));
-        setenv('KWAVE_NATIVE_TX_INDICES_H5',strjoin(string(h5index.'),','));
-        raw=kspaceFirstOrder2DG(kgrid,medium,source,sensor,common{:}, ...
-            'BinaryPath',cfg.binary_path,'DeviceNum',cfg.device_num, ...
-            'DataPath',cfg.work_dir,'DataName',['wust_' char(java.util.UUID.randomUUID())], ...
-            'DeleteData',false);
-        assert(size(raw,1)==nr*nt,'Unexpected native receiver output size');
-        raw=reshape(single(raw),nr,nt,[]);
+    case 'native-batch'
+        raw = simulate_native(kgrid,medium,source,sensor,common,cfg,tx,nr,ny,nx);
     case 'matlab-serial'
-        raw=zeros(nr,nt,numel(model.source_pressure),'single');
-        for j=1:nt
-            source.p_mask=zeros(ny,nx);source.p_mask(tx(j))=1;
-            p=kspaceFirstOrder2D(kgrid,medium,source,sensor,common{:});
-            raw(:,j,:)=reshape(p,nr,1,[]);
-        end
+        raw = simulate_serial(kgrid,medium,source,sensor,common,tx,nr,ny,nx);
     otherwise
-        error('backend must be native128 or matlab-serial');
+        error('backend must be native-batch or matlab-serial');
 end
 generationSeconds=toc(timer);timer=tic;pressure=[];
 % Filter ONE TX at a time, avoiding a double-precision copy of the full RF cube.
@@ -74,4 +59,36 @@ rf=struct('schema','wust.rf','schema_version',2,'data_units','Pa', ...
     'generation_seconds',generationSeconds,'filter_seconds',toc(timer), ...
     'resampling',meta,'config',cfg,'axis_order','time,receiver,transmitter', ...
     'physics','2D linear acoustics; scalar density; zero attenuation'));
+end
+
+function raw = simulate_native(kgrid,medium,source,sensor,common,cfg,tx,nr,ny,nx)
+assert(isfield(cfg,'binary_path') && isfield(cfg,'device_num'), ...
+    'Native binary_path/device_num required');
+nt = numel(tx);
+assert(nt>=2, 'Native batch requires at least two transmitters');
+source.p_mask = zeros(ny,nx);
+source.p_mask(tx(1)) = 1;
+[row,col] = ind2sub([ny,nx],tx);
+p = cfg.pml_size;
+h5index = (row+p)+(col+p-1)*(ny+2*p);
+old = getenv('KWAVE_NATIVE_TX_INDICES_H5');
+cleanup = onCleanup(@()setenv('KWAVE_NATIVE_TX_INDICES_H5',old)); %#ok<NASGU>
+setenv('KWAVE_NATIVE_TX_INDICES_H5',strjoin(string(h5index.'),','));
+raw = kspaceFirstOrder2DG(kgrid,medium,source,sensor,common{:}, ...
+    'BinaryPath',cfg.binary_path,'DeviceNum',cfg.device_num, ...
+    'DataPath',cfg.work_dir,'DataName',['wust_' char(java.util.UUID.randomUUID())], ...
+    'DeleteData',false);
+assert(size(raw,1)==nr*nt,'Unexpected native receiver output size');
+raw = reshape(single(raw),nr,nt,[]);
+end
+
+function raw = simulate_serial(kgrid,medium,source,sensor,common,tx,nr,ny,nx)
+nt = numel(tx);
+raw = zeros(nr,nt,numel(kgrid.t_array),'single');
+for j = 1:nt
+    source.p_mask = zeros(ny,nx);
+    source.p_mask(tx(j)) = 1;
+    pressure = kspaceFirstOrder2D(kgrid,medium,source,sensor,common{:});
+    raw(:,j,:) = reshape(pressure,nr,1,[]);
+end
 end

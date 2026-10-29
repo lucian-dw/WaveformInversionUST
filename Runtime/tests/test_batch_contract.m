@@ -7,7 +7,7 @@ obs=struct('x_m',x,'y_m',x,'tx_index',[6+21*5;15+21*14], ...
 obs=wust_test_measurements(obs);
 src=zeros(21,21,2);for i=1:2,src(obs.tx_index(i)+(i-1)*numel(c))=1;end
 for fi=1:2
-    solver=HelmholtzSolver(x,x,c,zeros(size(c)),obs.frequencies_hz(fi),-1,10,.003,[1400,1700]);
+    solver=HelmholtzSolver(x,x,c,zeros(size(c)),obs.frequencies_hz(fi),-1,10,.003,struct('stencil_bounds',[1400,1700],'backend','cpu'));
     u=reshape(solver.solve(src,false),[],2);obs.Y(:,:,fi)=u(obs.rx_index,:).';
 end
 mask=false(21);mask(5:17,5:17)=true;

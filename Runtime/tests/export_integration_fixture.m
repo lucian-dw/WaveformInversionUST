@@ -8,7 +8,7 @@ nt=numel(geo.tx_index);src=zeros([size(c),nt]);
 for i=1:nt,src(geo.tx_index(i)+(i-1)*numel(c))=1;end
 p=complex(zeros(nt,numel(geo.rx_index),numel(input.frequencies_hz)));
 for fi=1:numel(input.frequencies_hz)
-    solver=HelmholtzSolver(geo.x_m,geo.y_m,c,zeros(size(c)),input.frequencies_hz(fi),-1,10,.003,[1400,1700]);
+    solver=HelmholtzSolver(geo.x_m,geo.y_m,c,zeros(size(c)),input.frequencies_hz(fi),-1,10,.003,struct('stencil_bounds',[1400,1700],'backend','cpu'));
     u=solver.solve(src,false);u=reshape(u,[],nt);p(:,:,fi)=u(geo.rx_index,:).';
 end
 input.pressure=p;input.mask=permute(input.mask,[2,3,1]);

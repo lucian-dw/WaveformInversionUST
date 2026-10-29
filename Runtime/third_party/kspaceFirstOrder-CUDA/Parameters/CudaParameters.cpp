@@ -54,7 +54,7 @@ CudaParameters::CudaParameters()
     mSolverBlockSize1D(kUndefinedSize),
     mSolverGridSize1D(kUndefinedSize),
     mSolverTransposeBlockSize(kUndefinedSize),
-    mSolverTransposeGirdSize(kUndefinedSize),
+    mSolverTransposeGridSize(kUndefinedSize),
     mSamplerBlockSize1D(kUndefinedSize),
     mSamplerGridSize1D(kUndefinedSize),
     mDeviceProperties()
@@ -214,7 +214,7 @@ void CudaParameters::setKernelConfiguration()
   // Transposition kernels.
   mSolverTransposeBlockSize = dim3(32, 4 , 1);
   // Grid size for the transposition kernels
-  mSolverTransposeGirdSize = dim3(mDeviceProperties.multiProcessorCount * 16, 1, 1);
+  mSolverTransposeGridSize = dim3(mDeviceProperties.multiProcessorCount * 16, 1, 1);
 
 
   // Set configuration for Streaming kernels.

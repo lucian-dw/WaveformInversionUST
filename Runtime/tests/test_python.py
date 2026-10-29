@@ -60,6 +60,8 @@ class Contracts(unittest.TestCase):
                 "p_source_many": 0,
                 "absorbing_flag": 0,
                 "rho0": 1000,
+                "c0": 1500,
+                "p_source_mode": 0,
             }.items():
                 h[key] = np.array([[[val]]], dtype=np.uint64)
             h["sensor_mask_index"] = np.array([[[3, 7, 11]]], dtype=np.uint64)
@@ -83,6 +85,27 @@ class Contracts(unittest.TestCase):
                     [3, 7, 11, 51, 55, 59, 99, 103, 107],
                 )
                 self.assertEqual(h["p_source_input"].shape, (5, 3, 1))
+
+    def test_each_transmitter_uses_its_local_pressure_source_scale(self):
+        for mode, exponent in ((0, 2), (1, 1)):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                src, dst = Path(directory) / "input.h5", Path(directory) / "batch.h5"
+                self.make_input(src)
+                speed = np.full(48, 1500.0)
+                speed[6], speed[10] = 1550, 1450
+                with h5py.File(src, "r+") as handle:
+                    del handle["c0"]
+                    handle["c0"] = speed.reshape(1, 6, 8)
+                    handle["p_source_mode"][...] = mode
+                native.expand_input(src, dst, 3, source_indices=[11, 3, 7])
+                with h5py.File(dst) as handle:
+                    expected = (
+                        np.arange(5)[:, None]
+                        * (1500 / speed[[10, 2, 6]])[None, :] ** exponent
+                    )
+                    np.testing.assert_allclose(
+                        handle["p_source_input"][..., 0], expected, rtol=1e-7
+                    )
 
     def test_reject_3d_absorption_and_duplicates(self):
         for key, value in [("Nz", 2), ("absorbing_flag", 1)]:

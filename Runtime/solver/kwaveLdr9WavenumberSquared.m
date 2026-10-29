@@ -4,9 +4,8 @@ function [qEffective,dqDm,metadata] = kwaveLdr9WavenumberSquared( ...
 % fixed-coefficient nine-point Helmholtz stencil.  The angular objective is
 % a frozen 8-point Gauss-Legendre average over [0,pi/4].
 
-if nargin<9 || isempty(modelReferenceSpeedMps)
-    modelReferenceSpeedMps=mean(double(soundSpeed(:)));
-end
+assert(nargin==9 && ~isempty(modelReferenceSpeedMps), ...
+    'WUST:InvalidInput','A fixed model reference speed is required');
 c=double(soundSpeed);f=double(frequencyHz);h=double(spacingM);
 dt=double(timeStepS);cr=double(referenceSpeedMps);c0=double(modelReferenceSpeedMps);
 if any(c(:)<=0)||f<=0||h<=0||dt<=0||cr<=0||c0<=0
@@ -56,10 +55,12 @@ dqDm=(Qp./(h*h)).*dKdm;
 if any(~isfinite(qEffective(:))|qEffective(:)<=0)|any(~isfinite(dqDm(:)))
     error('LDR-9 produced invalid wavenumber or derivative.');
 end
+if nargout>2
 metadata=struct('mode','kwave-aware-ldr9','quadrature','gauss-legendre-8', ...
     'time_step_s',dt,'reference_speed_mps',cr, ...
     'model_reference_speed_mps',c0,'q_min',min(qEffective(:)), ...
     'q_max',max(qEffective(:)),'dqdm_min',min(dqDm(:)), ...
     'dqdm_max',max(dqDm(:)),'target_K_min',min(K(:)), ...
     'target_K_max',max(K(:)));
+end
 end

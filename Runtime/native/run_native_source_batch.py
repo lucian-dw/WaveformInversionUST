@@ -102,6 +102,26 @@ def expand_input(
                 or np.unique(indices).size != indices.size
             ):
                 raise ValueError("Invalid or duplicated physical grid indices")
+        # k-Wave exports pressure as a mass source. Undo the first TX's local
+        # c scaling, then apply each TX's own scale: 1/c^2 for Dirichlet,
+        # 1/c for additive pressure (uniform grid only, checked above).
+        speed = np.asarray(handle["c0"][...], dtype=np.float64).ravel()
+        if speed.size not in (1, field_elements) or not np.all(
+            np.isfinite(speed) & (speed > 0)
+        ):
+            raise ValueError("c0 must be a positive scalar or physical-grid field")
+        mode = int(np.asarray(handle["p_source_mode"][...]).ravel()[0])
+        if mode not in (0, 1, 2):
+            raise ValueError("Unsupported pressure source mode")
+        first_source = int(np.asarray(handle["p_source_index"][...]).ravel()[0]) - 1
+        if not 0 <= first_source < field_elements:
+            raise ValueError("Original source index is outside physical grid")
+        amplitude_scale = np.ones(batch_size)
+        if speed.size > 1:
+            amplitude_scale = (
+                speed[first_source] / speed[physical_sources.astype(int) - 1]
+            ) ** (2 if mode == 0 else 1)
+        waveforms = (waveform[:, None] * amplitude_scale[None, :]).astype(np.float32)
         encoded_sources = (
             physical_sources + np.arange(batch_size, dtype=np.uint64) * field_elements
         )
@@ -119,9 +139,7 @@ def expand_input(
         )
         source_input_ds = handle.create_dataset(
             "p_source_input",
-            data=np.repeat(waveform[:, None], batch_size, axis=1).reshape(
-                waveform.size, batch_size, 1
-            ),
+            data=waveforms.reshape(waveform.size, batch_size, 1),
         )
         sensor_ds = handle.create_dataset(
             "sensor_mask_index", data=encoded_sensors.reshape(1, 1, -1)

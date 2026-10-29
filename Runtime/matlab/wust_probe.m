@@ -4,7 +4,7 @@ facts=struct('matlab_available',true,'matlab_version',version,'platform',compute
 try
     wust_setup('cpu');
     x=(-3:3)*.001;c=1500*ones(7);
-    solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,[1400,1700]);
+    solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,struct('stencil_bounds',[1400,1700],'backend','cpu'));
     q=zeros(7);q(4,4)=1;u=solver.solve(q,false);
     assert(all(isfinite(u(:))));facts.cpu_available=true;
 catch err,facts.cpu_failure_reason=err.message;end
@@ -17,7 +17,7 @@ try
             if isprop(g,field{1}),facts.(field{1})=g.(field{1});end
         end
         wust_setup('gpu');
-        solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,[1400,1700],'inverse',[],'gpu');
+        solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,struct('stencil_bounds',[1400,1700],'backend','gpu'));
         u=solver.solve(q,false);assert(all(isfinite(gather(u(:)))));
         facts.gpu_available=true;
     end

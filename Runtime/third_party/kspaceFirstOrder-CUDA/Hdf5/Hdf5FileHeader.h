@@ -48,7 +48,7 @@
 | simulation_phase_execution_time         Time taken to run the simulation                                             |
 | post-processing_phase_execution_time    Time taken to complete the post-processing phase                             |
 | total_execution_time                    Total execution time                                                         |
-| peak_core_memory_in_use                 Peak memory required per core during the simulation                          |
+| peak_core_memory_in_use                 Estimated total memory divided by CPU thread count                          |
 | total_memory_in_use                     Peak memory in use                                                           |
 +----------------------------------------------------------------------------------------------------------------------+
 \endverbatim
@@ -160,19 +160,19 @@ class Hdf5FileHeader
     };
 
     /// Constructor.
-    Hdf5FileHeader();
+    Hdf5FileHeader() = default;
     /**
      * @brief Copy constructor.
      * @param [in] src - Source object.
      */
-    Hdf5FileHeader(const Hdf5FileHeader& src);
+    Hdf5FileHeader(const Hdf5FileHeader& src) = default;
     /// Destructor.
-    ~Hdf5FileHeader();
+    ~Hdf5FileHeader() = default;
     /**
      * @brief Operator =.
      * @param[in] src - Assignment source.
      */
-    Hdf5FileHeader& operator=(const Hdf5FileHeader& src);
+    Hdf5FileHeader& operator=(const Hdf5FileHeader& src) = default;
 
     /**
      * @brief Read header from the input file.

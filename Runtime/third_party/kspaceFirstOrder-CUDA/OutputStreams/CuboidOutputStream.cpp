@@ -91,7 +91,7 @@ void CuboidOutputStream::create()
     CuboidInfo cuboidInfo;
 
     cuboidInfo.cuboidIdx = createCuboidDataset(cuboidIdx);
-    cuboidInfo.startingPossitionInBuffer = actualPositionInBuffer;
+    cuboidInfo.startingPositionInBuffer = actualPositionInBuffer;
     mCuboidsInfo.push_back(cuboidInfo);
 
     actualPositionInBuffer += (mSensorMask.getBottomRightCorner(cuboidIdx) -
@@ -149,7 +149,7 @@ void CuboidOutputStream::reopen()
 
     // Open the dataset
     cuboidInfo.cuboidIdx = mFile.openDataset(mGroup, datasetName);
-    cuboidInfo.startingPossitionInBuffer = actualPositionInBuffer;
+    cuboidInfo.startingPositionInBuffer = actualPositionInBuffer;
     mCuboidsInfo.push_back(cuboidInfo);
 
     const DimensionSizes cuboidSize = mSensorMask.getBottomRightCorner(cuboidIdx) -
@@ -415,7 +415,7 @@ void CuboidOutputStream::flushBufferToFile()
     mFile.writeHyperSlab(mCuboidsInfo[cuboidIdx].cuboidIdx,
                          position,
                          blockSize,
-                         mHostBuffer + mCuboidsInfo[cuboidIdx].startingPossitionInBuffer);
+                         mHostBuffer + mCuboidsInfo[cuboidIdx].startingPositionInBuffer);
   }
 
   mSampledTimeStep++;

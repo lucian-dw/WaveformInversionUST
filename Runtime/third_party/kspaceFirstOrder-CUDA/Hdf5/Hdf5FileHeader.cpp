@@ -53,6 +53,10 @@ using std::ios;
 
 /// Shortcut for file header items
 using FHI = Hdf5FileHeader::FileHeaderItems;
+namespace {
+const FHI basicHeaderItems[] = {FHI::kCreatedBy, FHI::kCreationDate,
+    FHI::kFileDescription, FHI::kMajorVersion, FHI::kMinorVersion};
+}
 
 //--------------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------- Initialization ---------------------------------------------------//
@@ -116,50 +120,6 @@ std::map<Hdf5FileHeader::FileVersion, Hdf5FileHeader::FileVersionNames> Hdf5File
 //--------------------------------------------------------------------------------------------------------------------//
 
 /**
- * Constructor.
- */
-Hdf5FileHeader::Hdf5FileHeader()
-  : mHeaderValues()
-{
-
-}// end of constructor
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
- * Copy constructor.
- */
-Hdf5FileHeader::Hdf5FileHeader(const Hdf5FileHeader& src)
-  : mHeaderValues(src.mHeaderValues)
-{
-
-}// end of copy constructor
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
- * Destructor.
- */
-Hdf5FileHeader::~Hdf5FileHeader()
-{
-  mHeaderValues.clear();
-}// end of destructor
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
- * Assignment operator.
- */
-Hdf5FileHeader& Hdf5FileHeader::operator=(const Hdf5FileHeader& src)
-{
-  if (this != &src)
-  {
-    mHeaderValues.clear();
-    mHeaderValues = src.mHeaderValues;
-  }
-
-  return *this;
-}// end of operator=
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
  * Read header from the input file.
  */
 void Hdf5FileHeader::readHeaderFromInputFile(Hdf5File& inputFile)
@@ -178,11 +138,7 @@ void Hdf5FileHeader::readHeaderFromInputFile(Hdf5File& inputFile)
 
   if (getFileType() == FileType::kInput)
   {
-    readItem(FHI::kCreatedBy);
-    readItem(FHI::kCreationDate);
-    readItem(FHI::kFileDescription);
-    readItem(FHI::kMajorVersion);
-    readItem(FHI::kMinorVersion);
+    for (const auto item : basicHeaderItems) readItem(item);
   }
   else
   {
@@ -241,11 +197,7 @@ void Hdf5FileHeader::readHeaderFromCheckpointFile(Hdf5File& checkpointFile)
 
   if (getFileType() == FileType::kCheckpoint)
   {
-    readItem(FHI::kCreatedBy);
-    readItem(FHI::kCreationDate);
-    readItem(FHI::kFileDescription);
-    readItem(FHI::kMajorVersion);
-    readItem(FHI::kMinorVersion);
+    for (const auto item : basicHeaderItems) readItem(item);
   }
   else
   {
@@ -285,11 +237,7 @@ void Hdf5FileHeader::writeHeaderToCheckpointFile(Hdf5File& checkpointFile)
 
   // Write header
   writeItem(FHI::kFileType);
-  writeItem(FHI::kCreatedBy);
-  writeItem(FHI::kCreationDate);
-  writeItem(FHI::kFileDescription);
-  writeItem(FHI::kMajorVersion);
-  writeItem(FHI::kMinorVersion);
+  for (const auto item : basicHeaderItems) writeItem(item);
 }// end of writeHeaderToCheckpointFile
 //----------------------------------------------------------------------------------------------------------------------
 

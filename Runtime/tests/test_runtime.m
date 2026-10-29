@@ -41,7 +41,7 @@ obs=struct('x_m',x,'y_m',y,'tx_index',tx,'rx_index',rx, ...
     'frequencies_hz',[.1e6,.12e6],'fourier_sign',-1,'mask',true(3,4,2));
 src=zeros([size(c),3]);for j=1:3,src(tx(j)+(j-1)*numel(c))=1;end
 for k=1:2
-    s=HelmholtzSolver(x,y,c,zeros(size(c)),obs.frequencies_hz(k),-1,10,.004,[1400,1700],'inverse',[],backend);
+    s=HelmholtzSolver(x,y,c,zeros(size(c)),obs.frequencies_hz(k),-1,10,.004,struct('stencil_bounds',[1400,1700],'backend',backend));
     u=s.solve(src,false);if isa(u,'gpuArray'),u=gather(u);end;u=reshape(u,[],3);
     obs.Y(:,:,k)=u(rx,:).';
 end

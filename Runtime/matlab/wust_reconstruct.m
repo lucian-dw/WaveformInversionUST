@@ -135,6 +135,9 @@ if isfield(cfg,'max_updates') && ~isempty(cfg.max_updates)
     schedule=schedule(1:min(n,numel(schedule)));
 end
 cfg.schedule=schedule(:).';
+counts=obs.valid_receiver_counts(:,unique(cfg.schedule));
+assert(all(counts(:)>=2),'WUST:InvalidInput', ...
+    'Source-scale fitting requires two valid receivers per scheduled TX/frequency');
 if ~isfield(cfg,'save_history'),cfg.save_history=false;end
 assert(islogical(cfg.save_history)&&isscalar(cfg.save_history), ...
     'WUST:InvalidInput','save_history must be boolean');

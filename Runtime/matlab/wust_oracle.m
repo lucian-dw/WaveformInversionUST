@@ -1,63 +1,93 @@
-function [loss,gradient,cache]=wust_oracle(c,obs,fi,cfg)
-% Single-frequency source-projected least squares, exact discrete adjoint.
-% Output gradient is w.r.t. SLOWNESS, not velocity; no filtering here.
-% Per-TX complex scale a=(u'*d)/(u'*u); envelope theorem removes da/ds.
-t=tic; x=obs.x_m;y=obs.y_m;[ny,nx]=size(c);nt=numel(obs.tx_index);
-assert(isequal(size(c),[numel(y),numel(x)]) && all(isfinite(c(:))&c(:)>0),'Invalid medium grid');
-assert(all(diff(x)>0) && all(diff(y)>0),'Grid must increase');
-assert(max(abs(diff(x)-mean(diff(x))))<mean(diff(x))*1e-7 && ...
-    max(abs(diff(y)-mean(diff(y))))<mean(diff(y))*1e-7,'Uniform grids required');
-spec=[];
-if strcmp(cfg.wavenumber,'kwave-ldr9')
-    spec=cfg.dispersion;
-else
-    assert(strcmp(cfg.wavenumber,'continuum'),'Unknown wavenumber model');
+function [loss, gradient, cache] = wust_oracle(c, obs, fi, cfg)
+% Source-projected least squares at one frequency on prepared observations.
+% The exact discrete gradient is with respect to slowness s = 1/c [s/m].
+% Per-source scale a=(u'*d)/(u'*u); the envelope theorem removes da/ds.
+timer = tic;
+ny = obs.shape_yx(1);
+nx = obs.shape_yx(2);
+nt = obs.n_tx;
+dispersion = [];
+if strcmp(cfg.wavenumber, 'kwave-ldr9')
+    dispersion = cfg.dispersion;
 end
-solver=HelmholtzSolver(x,y,double(c),zeros(ny,nx),obs.frequencies_hz(fi), ...
-    -1,cfg.pml_strength,cfg.pml_m,cfg.stencil_bounds,'inverse',spec,cfg.backend);
-sync(cfg.backend); factorSeconds=toc(t);t=tic;
-gradient=zeros(ny,nx);loss=0;normdata=0;virtual=cell(0);scales=cell(0);
-batch=cfg.source_batch_size;
-assert(batch>=1 && batch==round(batch),'Integer source_batch_size required');
-forwardSeconds=0;adjointSeconds=0;
-for first=1:batch:nt
-    ids=first:min(first+batch-1,nt);nb=numel(ids);src=zeros(ny,nx,nb,'single');
-    for j=1:nb,src(obs.tx_index(ids(j))+(j-1)*ny*nx)=1;end
-    timer=tic;[u,v]=solver.solve(src,false);sync(cfg.backend);forwardSeconds=forwardSeconds+toc(timer);
-    u=reshape(u,ny*nx,nb);pred=u(obs.rx_index,:);
-    mask=double(obs.mask(ids,:,fi).');data=double(obs.Y(ids,:,fi).');
-    assert(all(sum(mask,1)>=2), 'WUST:NumericalFailure', ...
-        'Source-scale fitting requires at least two valid receivers per scheduled TX/frequency');
-    if strcmp(cfg.backend,'gpu'),mask=gpuArray(single(mask));data=gpuArray(single(data));end
-    pred=pred.*mask;data=data.*mask;
-    den=sum(abs(pred).^2,1);num=sum(conj(pred).*data,1);
-    assert(all(local(isfinite(den)&den>realmin(classUnderlyingLocal(den)))) && ...
-        all(local(isfinite(num))), 'WUST:NumericalFailure','Unusable source-scale denominator/numerator');
-    a=num./den;
-    assert(all(local(isfinite(a))), 'WUST:NumericalFailure','Nonfinite source scale');
-    r=(pred.*a-data).*mask;
-    loss=loss+0.5*double(local(sum(abs(r).^2,'all')));
-    normdata=normdata+double(local(sum(abs(data).^2,'all')));
-    rhs=zeros(ny*nx,nb,'like',r);rhs(obs.rx_index,:)=r;
-    timer=tic;adj=solver.solve(reshape(rhs,ny,nx,nb),true);
-    adj=solver.massApply(adj,true);
-    gradient=gradient+double(local(sum(-real(conj(v.*reshape(a,1,1,nb)).*adj),3)));
-    sync(cfg.backend);adjointSeconds=adjointSeconds+toc(timer);
-    virtual{end+1}=v;scales{end+1}=a; %#ok<AGROW>
+solver = HelmholtzSolver(obs.x_m, obs.y_m, double(c), zeros(ny,nx), ...
+    obs.frequencies_hz(fi), -1, cfg.pml_strength, cfg.pml_m, ...
+    struct('backend',cfg.backend,'stencil_bounds',cfg.stencil_bounds, ...
+    'dispersion',dispersion));
+sync(cfg.backend);
+factorSeconds = toc(timer);
+timer = tic;
+gradient = zeros(ny,nx);
+loss = 0;
+virtual = cell(0);
+scales = cell(0);
+forwardSeconds = 0;
+adjointSeconds = 0;
+for first = 1:cfg.source_batch_size:nt
+    ids = first:min(first+cfg.source_batch_size-1,nt);
+    nb = numel(ids);
+    source = zeros(ny,nx,nb,'single');
+    for j = 1:nb
+        source(obs.tx_index(ids(j))+(j-1)*ny*nx) = 1;
+    end
+    solveTimer = tic;
+    [u,v] = solver.solve(source,false);
+    sync(cfg.backend);
+    forwardSeconds = forwardSeconds + toc(solveTimer);
+    u = reshape(u,ny*nx,nb);
+    predicted = u(obs.rx_index,:);
+    mask = double(obs.mask(ids,:,fi).');
+    observed = double(obs.Y(ids,:,fi).');
+    if strcmp(cfg.backend,'gpu')
+        mask = gpuArray(single(mask));
+        observed = gpuArray(single(observed));
+    end
+    predicted = predicted .* mask;
+    observed = observed .* mask;
+    denominator = sum(abs(predicted).^2,1);
+    numerator = sum(conj(predicted).*observed,1);
+    assert(all(local(isfinite(denominator) & denominator>realmin(classUnderlyingLocal(denominator)))) && ...
+        all(local(isfinite(numerator))), 'WUST:NumericalFailure', ...
+        'Unusable source-scale denominator/numerator');
+    scale = numerator ./ denominator;
+    assert(all(local(isfinite(scale))), 'WUST:NumericalFailure','Nonfinite source scale');
+    residual = (predicted.*scale-observed).*mask;
+    loss = loss + 0.5*double(local(sum(abs(residual).^2,'all')));
+    rhs = zeros(ny*nx,nb,'like',residual);
+    rhs(obs.rx_index,:) = residual;
+    solveTimer = tic;
+    adjoint = solver.solve(reshape(rhs,ny,nx,nb),true);
+    adjoint = solver.massApply(adjoint,true);
+    gradient = gradient + double(local(sum(-real(conj(v.*reshape(scale,1,1,nb)).*adjoint),3)));
+    sync(cfg.backend);
+    adjointSeconds = adjointSeconds + toc(solveTimer);
+    virtual{end+1} = v; %#ok<AGROW>
+    scales{end+1} = scale; %#ok<AGROW>
 end
-assert(isfinite(loss)&&isfinite(normdata)&&all(isfinite(gradient(:))), ...
-    'WUST:NumericalFailure','Nonfinite objective/gradient/data norm');
-cache=struct('solver',solver,'virtual',{virtual},'scales',{scales}, ...
-    'data_norm',normdata,'factor_seconds',factorSeconds, ...
+assert(isfinite(loss) && all(isfinite(gradient(:))), ...
+    'WUST:NumericalFailure','Nonfinite objective/gradient');
+cache = struct('solver',solver,'virtual',{virtual},'scales',{scales}, ...
+    'data_norm',obs.frequency_data_norm(fi),'factor_seconds',factorSeconds, ...
     'forward_seconds',forwardSeconds,'adjoint_seconds',adjointSeconds, ...
-    'oracle_seconds',factorSeconds+toc(t),'forward_rhs',nt,'adjoint_rhs',nt);
+    'oracle_seconds',factorSeconds+toc(timer),'forward_rhs',nt,'adjoint_rhs',nt);
 end
-function name=classUnderlyingLocal(a)
-if isa(a,'gpuArray'),name=classUnderlying(a);else,name=class(a);end
+
+function name = classUnderlyingLocal(a)
+if isa(a,'gpuArray')
+    name = classUnderlying(a);
+else
+    name = class(a);
 end
-function a=local(a)
-if isa(a,'gpuArray'),a=gather(a);end
 end
+
+function a = local(a)
+if isa(a,'gpuArray')
+    a = gather(a);
+end
+end
+
 function sync(backend)
-if strcmp(backend,'gpu'),wait(gpuDevice);end
+if strcmp(backend,'gpu')
+    wait(gpuDevice);
+end
 end

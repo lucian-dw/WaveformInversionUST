@@ -108,9 +108,8 @@ SZIP_DIR = $(EBROOTSZIP)
 .RECIPEPREFIX += 
 
 # What CUDA GPU architectures to include in the binary
-# Project-isolated A100 build. Keep this copy local to the project and do not
-# replace the server-wide/default k-Wave binary.
-CUDA_ARCH = --generate-code arch=compute_80,code=sm_80
+# Override for the deployment GPU; used by both compilation and device linking.
+CUDA_ARCH ?= --generate-code arch=compute_80,code=sm_80
 
 # What libraries to link and how
 ifeq ($(LINKING), STATIC)
@@ -294,6 +293,9 @@ DEPENDENCIES = main.o                                   \
                Parameters/Parameters.o                  \
                Parameters/CudaParameters.o              \
                Parameters/CudaDeviceConstants.o
+
+HEADERS = $(wildcard */*.h */*.cuh)
+$(DEPENDENCIES): $(HEADERS)
 
 # Build target
 all: $(TARGET)

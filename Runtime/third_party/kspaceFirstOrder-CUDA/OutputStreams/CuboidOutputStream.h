@@ -111,7 +111,7 @@ class CuboidOutputStream : public BaseOutputStream
       /// Idx of the dataset storing the given cuboid.
       hid_t  cuboidIdx;
       /// Having a single buffer for all cuboids, where this one starts.
-      size_t startingPossitionInBuffer;
+      size_t startingPositionInBuffer;
     };
 
     /**

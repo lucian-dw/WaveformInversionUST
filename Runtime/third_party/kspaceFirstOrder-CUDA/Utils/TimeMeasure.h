@@ -32,124 +32,36 @@
 #ifndef TIME_MEASURE_H
 #define TIME_MEASURE_H
 
-#ifdef _OPENMP
-  #include <omp.h>
-#else
-  // Linux build
-  #ifdef __linux__
-    #include <sys/time.h>
-  #endif
-  // Windows build with Visual Studio
-  #ifdef _WIN64
-    #include <Windows.h>
-    #include <time.h>
-  #endif
-#endif
+#include <chrono>
 
-/**
- * @class   TimeMeasure
- * @brief   Class measuring elapsed time.
- * @details Class measuring elapsed time, even over multiple simulation legs.
- */
+/// Monotonic elapsed wall time, including resumed simulation legs.
 class TimeMeasure
 {
   public:
-    /// Default constructor.
-    TimeMeasure()
-      : mStartTime(0.0),
-        mStopTime(0.0),
-        mElapsedTimeOverPreviousLegs(0.0)
-    { };
-
-    /// Copy constructor.
-    TimeMeasure(const TimeMeasure&) = default;
-
-    /// Destructor.
-    ~TimeMeasure() = default;
-
-    /// Operator =.
-    TimeMeasure& operator=(const TimeMeasure&) = default;
-
-    /// Take start timestamp.
-    void start()
-    {
-      #ifdef _OPENMP
-        mStartTime = omp_get_wtime();
-      #else
-        // Linux build
-        #ifdef __linux__
-          timeval actTime;
-          gettimeofday(&actTime, nullptr);
-          mStartTime = actTime.tv_sec + actTime.tv_usec * 1.0e-6;
-        #endif
-        #ifdef _WIN64
-          mStartTime = clock() / (double) CLOCKS_PER_SEC;
-        #endif
-      #endif
-    };
-
-    /// Take stop timestamp.
-    void stop()
-    {
-      #ifdef _OPENMP
-        mStopTime = omp_get_wtime();
-      #else
-        // Linux build
-        #ifdef __linux__
-          timeval actTime;
-          gettimeofday(&actTime, nullptr);
-          mStopTime = actTime.tv_sec + actTime.tv_usec * 1.0e-6;
-        #endif
-        #ifdef _WIN64
-          mStopTime = clock() / (double) CLOCKS_PER_SEC;
-        #endif
-      #endif
-    };
-
-    /**
-     * @brief  Get elapsed time.
-     * @return Elapsed time between start and stop timestamps.
-     */
+    void start() { mStartTime = Clock::now(); }
+    void stop() { mStopTime = Clock::now(); }
     double getElapsedTime() const
     {
-      return mStopTime - mStartTime;
-    };
-
-    /**
-     * @brief  Get cumulated elapsed time over all simulation legs.
-     * @return Elapsed time all (including this one) legs.
-     */
+      return std::chrono::duration<double>(mStopTime - mStartTime).count();
+    }
     double getElapsedTimeOverAllLegs() const
     {
-      return mElapsedTimeOverPreviousLegs + (mStopTime - mStartTime);
-    };
-
-    /**
-     * @brief  Get time spent in previous legs.
-     * @return Elapsed time over previous legs.
-     */
+      return mElapsedTimeOverPreviousLegs + getElapsedTime();
+    }
     double getElapsedTimeOverPreviousLegs() const
     {
       return mElapsedTimeOverPreviousLegs;
-    };
-
-    /**
-     * @brief Set elapsed time in previous legs of the simulation.
-     * @param [in] elapsedTime - Elapsed time.
-     */
-    void SetElapsedTimeOverPreviousLegs(const double elapsedTime)
+    }
+    void SetElapsedTimeOverPreviousLegs(double seconds)
     {
-      mElapsedTimeOverPreviousLegs = elapsedTime;
+      mElapsedTimeOverPreviousLegs = seconds;
     }
 
   private:
-    /// Start timestamp of the interval
-    double mStartTime;
-    /// Stop timestamp of the interval
-    double mStopTime;
-    /// Elapsed time in previous simulation legs
-    double mElapsedTimeOverPreviousLegs;
-};// end of TimeMeasure
-//----------------------------------------------------------------------------------------------------------------------
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point mStartTime{};
+    Clock::time_point mStopTime{};
+    double mElapsedTimeOverPreviousLegs = 0;
+};
 
-#endif	/* TIME_MEASURE_H */
+#endif

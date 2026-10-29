@@ -108,7 +108,7 @@ class RealMatrix : public BaseFloatMatrix
     static constexpr size_t kChunkSize1D8MB   = 2 * 1024 * 1024; //(8MB)
     /// Number of elements to get 1MB block of data.
     static constexpr size_t kChunkSize1D1MB   =      256 * 1024; //(1MB)
-    /// Number of elements to get 256KB block of data.
+    /// Number of elements to get 128KB block of data.
     static constexpr size_t kChunkSize1D128kB =       32 * 1024; //(128KB)
 };// end of RealMatrix
 //----------------------------------------------------------------------------------------------------------------------

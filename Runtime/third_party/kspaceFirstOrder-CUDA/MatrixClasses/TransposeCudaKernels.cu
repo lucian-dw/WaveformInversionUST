@@ -53,10 +53,10 @@ inline dim3 getSolverTransposeBlockSize()
  * @brief  Get grid size for complex 3D kernels
  * @return 3D grid size
  */
-inline dim3 GetSolverTransposeGirdSize()
+inline dim3 GetSolverTransposeGridSize()
 {
-  return Parameters::getInstance().getCudaParameters().getSolverTransposeGirdSize();
-};// end of getSolverTransposeGirdSize()
+  return Parameters::getInstance().getCudaParameters().getSolverTransposeGridSize();
+};// end of getSolverTransposeGridSize()
 //----------------------------------------------------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------------------------------------------------//
@@ -185,7 +185,7 @@ void TransposeCudaKernels::trasposeReal3DMatrixXY(float*       outputMatrix,
   // Fixed size at the moment, may be tuned based on the domain shape in the future
   // warpSize set to 32, and 4 tiles processed at once
   cudaTrasnposeReal3DMatrixXY<padding, 32, 4>
-                             <<<GetSolverTransposeGirdSize(), getSolverTransposeBlockSize()>>>
+                             <<<GetSolverTransposeGridSize(), getSolverTransposeBlockSize()>>>
                              (outputMatrix, inputMatrix, dimSizes);
 
   // Check for errors
@@ -338,7 +338,7 @@ void TransposeCudaKernels::trasposeReal3DMatrixXZ(float*       outputMatrix,
   // Fixed size at the moment, may be tuned based on the domain shape in the future
   // warpSize set to 32, and 4 tiles processed at once
   cudaTrasnposeReal3DMatrixXZ<padding, 32, 4>
-                              <<<GetSolverTransposeGirdSize(), getSolverTransposeBlockSize()>>>
+                              <<<GetSolverTransposeGridSize(), getSolverTransposeBlockSize()>>>
                              (outputMatrix, inputMatrix, dimSizes);
 
   // Check for errors

@@ -109,13 +109,7 @@ void WholeDomainOutputStream::reopen()
   mDataset = mFile.openDataset(mFile.getRootGroup(), mRootObjectName);
 
   mSampledTimeStep = 0;
-  if (mReduceOp == ReduceOperator::kNone)
-  { // Seek in the dataset
-    mSampledTimeStep = (params.getTimeIndex() < params.getSamplingStartTimeIndex())
-                          ? 0 : (params.getTimeIndex() - params.getSamplingStartTimeIndex());
-  }
-  else
-  { // Reload data
+  {
     // Read data from disk only if there were anything stored there (t_index > start_index)
     //(one step ahead)
     if (params.getTimeIndex() > params.getSamplingStartTimeIndex())
@@ -138,31 +132,6 @@ void WholeDomainOutputStream::sample()
 {
   switch (mReduceOp)
   {
-    case ReduceOperator::kNone:
-    {
-      // Copy all data from decice to host (no need to use a kernel)
-      // This violates the const prerequisite, however, this routine is still NOT used in the code
-      const_cast<RealMatrix&>(mSourceMatrix).copyFromDevice();
-
-      // We use here direct HDF5 offload using MEMSPACE - seems to be faster for bigger datasets
-      const DimensionSizes datasetPosition(0, 0, 0, mSampledTimeStep); //4D position in the dataset
-
-      DimensionSizes cuboidSize(mSourceMatrix.getDimensionSizes());// Size of the cuboid
-      cuboidSize.nt = 1;
-
-      mFile.writeCuboidToHyperSlab(mDataset,
-                                   datasetPosition,
-                                   DimensionSizes(0, 0, 0, 0), // position in the SourceMatrix
-                                   cuboidSize,
-                                   mSourceMatrix.getDimensionSizes(),
-                                   mSourceMatrix.getHostData());
-
-      // Move forward in time
-      mSampledTimeStep++;
-
-      break;
-    }// case kNone
-
     case ReduceOperator::kRms:
     {
       OutputStreamsCudaKernels::sampleAll<ReduceOperator::kRms>
@@ -189,6 +158,8 @@ void WholeDomainOutputStream::sample()
                                           mSourceMatrix.size());
       break;
     }//case kMin
+    default:
+      throw std::invalid_argument("Whole-domain output requires RMS, min or max");
   }// switch
 }// end of sample
 //----------------------------------------------------------------------------------------------------------------------
@@ -201,15 +172,8 @@ void WholeDomainOutputStream::postProcess()
   // Run inherited method
   BaseOutputStream::postProcess();
 
-  // When no reduction operator is applied, the data is flushed after every time step
-  // which means it has been done before
-  if (mReduceOp != ReduceOperator::kNone)
-  {
-    // Copy data from GPU matrix
-    copyFromDevice();
-
-    flushBufferToFile();
-  }
+  copyFromDevice();
+  flushBufferToFile();
 }// end of postProcess
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -221,11 +185,7 @@ void WholeDomainOutputStream::checkpoint()
   // Copy data on the CPU
   copyFromDevice();
 
-  // Raw data has already been flushed, others has to be flushed here
-  if (mReduceOp != ReduceOperator::kNone)
-  {
-    flushBufferToFile();
-  }
+  flushBufferToFile();
 }// end of checkpoint
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -257,12 +217,6 @@ void WholeDomainOutputStream::flushBufferToFile()
   DimensionSizes size = mSourceMatrix.getDimensionSizes();
   DimensionSizes position(0, 0, 0);
 
-  // Not used for kNone now!
-  if (mReduceOp == ReduceOperator::kNone)
-  {
-    position.nt = mSampledTimeStep;
-    size.nt = mSampledTimeStep;
-  }
 
   mFile.writeHyperSlab(mDataset, position, size, mHostBuffer);
   mSampledTimeStep++;

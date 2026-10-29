@@ -22,3 +22,7 @@ locations. The external archive is not part of a normal Git clone.
 See [attribution](../ATTRIBUTION.md) for licenses and upstream source, and
 [the runtime API](RUNTIME_API.md) for current operation contracts.
 Browse the [local archive](../../research_archive/WaveformInversionUST/).
+
+The former experimental block-LU macro variants and free-b stencil fitting are
+preserved at the same relative paths under Runtime/solver in that archive.
+The maintained solver uses pivoted inverse pages and fixed b=5/6.
