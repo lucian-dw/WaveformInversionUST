@@ -52,7 +52,6 @@ ComplexMatrix::ComplexMatrix(const DimensionSizes& dimensionSizes)
  */
 ComplexMatrix::~ComplexMatrix()
 {
-  freeMemory();
 }// end of ~ComplexMatrix
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -95,7 +94,7 @@ void ComplexMatrix::writeData(Hdf5File&         file,
   complexDims.nx = 2 * complexDims.nx;
 
   DimensionSizes chunks = complexDims;
-  complexDims.nz = 1;
+  chunks.nz = 1;
 
   // Create a dataset
   hid_t dataset = file.createDataset(file.getRootGroup(),
@@ -106,7 +105,7 @@ void ComplexMatrix::writeData(Hdf5File&         file,
                                      compressionLevel);
 
   // Write write the matrix at once at position [0,0,0].
-  file.writeHyperSlab(dataset, DimensionSizes(0, 0, 0), mDimensionSizes, mHostData);
+  file.writeHyperSlab(dataset, DimensionSizes(0, 0, 0), complexDims, mHostData);
   file.closeDataset(dataset);
 
  // Write data and domain type

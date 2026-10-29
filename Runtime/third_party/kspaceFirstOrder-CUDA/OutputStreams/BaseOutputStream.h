@@ -144,6 +144,7 @@ class BaseOutputStream
     /// Buffer size.
     size_t mBufferSize;
     /// Temporary buffer for store on the device side.
+    CudaBuffer<float> mBuffer;
     float* mHostBuffer;
     /// Temporary buffer on the device side - only for aggregated quantities.
     float* mDeviceBuffer;

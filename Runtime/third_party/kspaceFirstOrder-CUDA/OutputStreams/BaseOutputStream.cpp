@@ -30,6 +30,7 @@
  */
 
 #include <cmath>
+#include <algorithm>
 #include <immintrin.h>
 #include <limits>
 
@@ -117,82 +118,16 @@ void BaseOutputStream::postProcess()
  */
 void BaseOutputStream::allocateMemory()
 {
-  // Allocate memory on the host side
-  mHostBuffer = (float*) _mm_malloc(mBufferSize * sizeof(float), kDataAlignment);
-
-  if (!mHostBuffer)
-  {
-    throw std::bad_alloc();
-  }
-
-  // Memory allocation done on core 0 - GPU is pinned to the first sockets
-  // We need different initialization for different reduction ops.
-  switch (mReduceOp)
-  {
-    case ReduceOperator::kNone:
-    {
-      // Zero the matrix - on the CPU side and lock on core 0 (gpu pinned to 1st socket)
-      for (size_t i = 0; i < mBufferSize; i++)
-      {
-        mHostBuffer[i] = 0.0f;
-      }
-      break;
-    }// kNone
-
-    case ReduceOperator::kRms:
-    {
-      // Zero the matrix - on the CPU side and lock on core 0 (gpu pinned to 1st socket)
-      for (size_t i = 0; i < mBufferSize; i++)
-      {
-        mHostBuffer[i] = 0.0f;
-      }
-      break;
-    }// kRms
-
-    case ReduceOperator::kMax:
-    {
-      // Set the values to the highest negative float value - on the core 0
-      for (size_t i = 0; i < mBufferSize; i++)
-      {
-        mHostBuffer[i] = -1 * std::numeric_limits<float>::max();
-      }
-      break;
-    }// kMax
-
-    case ReduceOperator::kMin:
-    {
-      // Set the values to the highest float value - on the core 0
-      for (size_t i = 0; i < mBufferSize; i++)
-      {
-        mHostBuffer[i] = std::numeric_limits<float>::max();
-      }
-      break;
-    }//kMin
-  }// switch
-
-  // Register Host memory (pin in memory only - no mapped data)
-  cudaCheckErrors(cudaHostRegister(mHostBuffer,
-                                   mBufferSize * sizeof (float),
-                                   cudaHostRegisterPortable | cudaHostRegisterMapped));
-  // cudaHostAllocWriteCombined - cannot be used since GPU writes and CPU reads
-
-  // Map host data to device memory (raw data) or allocate a data data (aggregated)
-  if (mReduceOp == ReduceOperator::kNone)
-  {
-    // Register CPU memory for zero-copy
-    cudaCheckErrors(cudaHostGetDevicePointer<float>(&mDeviceBuffer, mHostBuffer, 0));
-  }
-  else
-  {
-    // Allocate memory on the GPU side
-    if ((cudaMalloc<float>(&mDeviceBuffer, mBufferSize * sizeof (float))!= cudaSuccess) || (!mDeviceBuffer))
-    {
-      throw std::bad_alloc();
-    }
-
-    // If doing aggregation copy initialized arrays on GPU
-    copyToDevice();
-  }
+  const bool mapped = mReduceOp == ReduceOperator::kNone;
+  mBuffer.allocate(mBufferSize, kDataAlignment, mapped);
+  mHostBuffer = mBuffer.host();
+  mDeviceBuffer = mBuffer.device();
+  float initial = 0.0f;
+  if (mReduceOp == ReduceOperator::kMax) initial = -std::numeric_limits<float>::max();
+  if (mReduceOp == ReduceOperator::kMin) initial = std::numeric_limits<float>::max();
+  // First touch on the socket hosting the GPU; raw streams use mapped host memory.
+  std::fill_n(mHostBuffer, mBufferSize, initial);
+  if (!mapped) copyToDevice();
 }// end of allocateMemory
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -201,19 +136,8 @@ void BaseOutputStream::allocateMemory()
  */
 void BaseOutputStream::freeMemory()
 {
-  // Free host buffer
-  if (mHostBuffer)
-  {
-    cudaHostUnregister(mHostBuffer);
-    _mm_free(mHostBuffer);
-  }
+  mBuffer.reset();
   mHostBuffer = nullptr;
-
-  // Free GPU memory
-  if (mReduceOp != ReduceOperator::kNone)
-  {
-    cudaCheckErrors(cudaFree(mDeviceBuffer));
-  }
   mDeviceBuffer = nullptr;
 }// end of FreeMemory
 //----------------------------------------------------------------------------------------------------------------------

@@ -65,11 +65,9 @@ CuboidOutputStream::CuboidOutputStream(Hdf5File&            file,
 CuboidOutputStream::~CuboidOutputStream()
 {
   // Destroy sampling event
-  cudaCheckErrors(cudaEventDestroy(mEventSamplingFinished));
-  // Close the stream
-  close();
-  // Free memory
-  freeMemory();
+  cudaEventDestroy(mEventSamplingFinished);
+  for (const auto& cuboid : mCuboidsInfo) H5Dclose(cuboid.cuboidIdx);
+  if (mGroup != H5I_BADID) H5Gclose(mGroup);
 }// end ~CuboidOutputStream
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -154,18 +152,13 @@ void CuboidOutputStream::reopen()
     cuboidInfo.startingPossitionInBuffer = actualPositionInBuffer;
     mCuboidsInfo.push_back(cuboidInfo);
 
+    const DimensionSizes cuboidSize = mSensorMask.getBottomRightCorner(cuboidIdx) -
+                                       mSensorMask.getTopLeftCorner(cuboidIdx);
     // Read only if there is anything to read
     if (params.getTimeIndex() > params.getSamplingStartTimeIndex())
     {
       if (mReduceOp != ReduceOperator::kNone)
       { // Reload data
-        DimensionSizes cuboidSize((mSensorMask.getBottomRightCorner(cuboidIdx) -
-                                   mSensorMask.getTopLeftCorner(cuboidIdx)).nx,
-                                  (mSensorMask.getBottomRightCorner(cuboidIdx) -
-                                   mSensorMask.getTopLeftCorner(cuboidIdx)).ny,
-                                  (mSensorMask.getBottomRightCorner(cuboidIdx) -
-                                   mSensorMask.getTopLeftCorner(cuboidIdx)).nz);
-
         mFile.readCompleteDataset(mGroup,
                                   datasetName,
                                   cuboidSize,
@@ -173,8 +166,7 @@ void CuboidOutputStream::reopen()
       }
     }
     // Move the pointer for the next cuboid beginning (this inits the locations)
-    actualPositionInBuffer += (mSensorMask.getBottomRightCorner(cuboidIdx) -
-                               mSensorMask.getTopLeftCorner(cuboidIdx)).nElements();
+    actualPositionInBuffer += cuboidSize.nElements();
   }
 
   // Copy data over to the GPU only if there is anything to read
@@ -284,7 +276,7 @@ void CuboidOutputStream::flushRaw()
   if (mReduceOp == ReduceOperator::kNone)
   {
     // Make sure the data has been copied from the GPU
-    cudaEventSynchronize(mEventSamplingFinished);
+    cudaCheckErrors(cudaEventSynchronize(mEventSamplingFinished));
 
     // Only raw time series are flushed down to the disk every time step
     flushBufferToFile();
@@ -366,10 +358,9 @@ hid_t CuboidOutputStream::createCuboidDataset(const size_t cuboidIdx)
                                       : 0; // will be a 3D dataset
 
   // Set cuboid dimensions (subtract two corners (add 1) and use the appropriate component)
-  DimensionSizes cuboidSize((mSensorMask.getBottomRightCorner(cuboidIdx) - mSensorMask.getTopLeftCorner(cuboidIdx)).nx,
-                            (mSensorMask.getBottomRightCorner(cuboidIdx) - mSensorMask.getTopLeftCorner(cuboidIdx)).ny,
-                            (mSensorMask.getBottomRightCorner(cuboidIdx) - mSensorMask.getTopLeftCorner(cuboidIdx)).nz,
-                            nSampledTimeSteps);
+  DimensionSizes cuboidSize = mSensorMask.getBottomRightCorner(cuboidIdx) -
+                              mSensorMask.getTopLeftCorner(cuboidIdx);
+  cuboidSize.nt = nSampledTimeSteps;
 
   // Set chunk size
   // If the size of the cuboid is bigger than 32 MB per time step, set the chunk to approx 8MB

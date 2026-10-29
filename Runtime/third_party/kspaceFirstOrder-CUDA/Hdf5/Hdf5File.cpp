@@ -46,9 +46,27 @@
 #include <Hdf5/Hdf5File.h>
 #include <Parameters/Parameters.h>
 #include <Logger/Logger.h>
+#include <vector>
+#include <numeric>
 
 using std::ios;
 using std::string;
+
+namespace {
+// Local ownership for handles that must close on both success and exceptions.
+class Hdf5Handle {
+  hid_t id;
+  herr_t (*closer)(hid_t);
+public:
+  Hdf5Handle(hid_t value, herr_t (*closeFunction)(hid_t)) : id(value), closer(closeFunction) {
+    if (id < 0) throw ios::failure("Cannot acquire HDF5 handle");
+  }
+  ~Hdf5Handle() noexcept { if (id >= 0) closer(id); }
+  Hdf5Handle(const Hdf5Handle&) = delete;
+  Hdf5Handle& operator=(const Hdf5Handle&) = delete;
+  operator hid_t() const { return id; }
+};
+}
 
 //--------------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------- Initialization ---------------------------------------------------//
@@ -97,9 +115,9 @@ Hdf5File::Hdf5File()
 /**
  * Destructor.
  */
-Hdf5File::~Hdf5File()
+Hdf5File::~Hdf5File() noexcept
 {
-  if (isOpen()) close();
+  if (isOpen()) H5Fclose(mFile);
 }//end of destructor
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -176,6 +194,7 @@ bool Hdf5File::canAccess(const string& fileName)
  */
 void Hdf5File::close()
 {
+  if (!isOpen()) return;
   // Terminate access to the file.
   herr_t status = H5Fclose(mFile);
 
@@ -228,7 +247,7 @@ hid_t Hdf5File::openGroup(const hid_t       parentGroup,
  */
 void Hdf5File::closeGroup(const hid_t group)
 {
-  H5Gclose(group);
+  if (H5Gclose(group) < 0) throw ios::failure("Cannot close HDF5 group");
 }// end of closeGroup
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -271,13 +290,12 @@ hid_t Hdf5File::createDataset(const hid_t                    parentGroup,
     chunk[2] = chunkSizes.nx;
   }
 
-  hid_t  propertyList;
   herr_t status;
 
-  hid_t dataspace = H5Screate_simple(rank, dims, nullptr);
+  Hdf5Handle dataspace(H5Screate_simple(rank, dims, nullptr), H5Sclose);
 
   // Set chunk size
-  propertyList = H5Pcreate(H5P_DATASET_CREATE);
+  Hdf5Handle propertyList(H5Pcreate(H5P_DATASET_CREATE), H5Pclose);
 
   status = H5Pset_chunk(propertyList, rank, chunk);
   if (status < 0)
@@ -311,8 +329,6 @@ hid_t Hdf5File::createDataset(const hid_t                    parentGroup,
     throw ios::failure(Logger::formatMessage(kErrFmtCannotOpenDataset, mFileName.c_str(), datasetName.c_str()));
   }
 
-  H5Pclose(propertyList);
-
   return dataset;
 }// end of createDataset
 //----------------------------------------------------------------------------------------------------------------------
@@ -340,7 +356,7 @@ hid_t Hdf5File::openDataset(const hid_t       parentGroup,
  */
 void  Hdf5File::closeDataset(const hid_t dataset)
 {
-  H5Dclose(dataset);
+  if (H5Dclose(dataset) < 0) throw ios::failure("Cannot close HDF5 dataset");
 }// end of closeDataset
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -354,11 +370,11 @@ void Hdf5File::writeHyperSlab(const hid_t           dataset,
                               const T*              data)
 {
   herr_t status;
-  hid_t filespace, memspace;
 
   // Get file space to find out number of dimensions
-  filespace = H5Dget_space(dataset);
+  Hdf5Handle filespace(H5Dget_space(dataset), H5Sclose);
   const int rank = H5Sget_simple_extent_ndims(filespace);
+  if (rank != 3 && rank != 4) throw ios::failure("Hyperslabs require rank 3 or 4");
 
   // Select sizes and positions, windows hack
   hsize_t nElement[4];
@@ -396,7 +412,7 @@ void Hdf5File::writeHyperSlab(const hid_t           dataset,
   }
 
   // Assign memspace
-  memspace = H5Screate_simple(rank, nElement, nullptr);
+  Hdf5Handle memspace(H5Screate_simple(rank, nElement, nullptr), H5Sclose);
 
 
   // Set status to error value to catch unknown data type.
@@ -416,8 +432,6 @@ void Hdf5File::writeHyperSlab(const hid_t           dataset,
     throw ios::failure(Logger::formatMessage(kErrFmtCannotWriteDataset, ""));
   }
 
-  H5Sclose(memspace);
-  H5Sclose(filespace);
 }// end of writeHyperSlab
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -451,7 +465,6 @@ void Hdf5File::writeCuboidToHyperSlab(const hid_t           dataset,
                                       const float*          matrixData)
 {
   herr_t status;
-  hid_t  filespace, memspace;
 
   constexpr int rank = 4;
 
@@ -467,7 +480,7 @@ void Hdf5File::writeCuboidToHyperSlab(const hid_t           dataset,
 
 
   // Select hyperslab in the HDF5 dataset
-  filespace = H5Dget_space(dataset);
+  Hdf5Handle filespace(H5Dget_space(dataset), H5Sclose);
   status    = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offsetInDataset, nullptr, slabSize, nullptr);
   if (status < 0)
   {
@@ -475,7 +488,7 @@ void Hdf5File::writeCuboidToHyperSlab(const hid_t           dataset,
   }
 
   // Assign memspace and select the cuboid in the sampled matrix
-  memspace = H5Screate_simple(3, matrixSize, nullptr);
+  Hdf5Handle memspace(H5Screate_simple(3, matrixSize, nullptr), H5Sclose);
   status   = H5Sselect_hyperslab(memspace,
                                  H5S_SELECT_SET,
                                  offsetInMatrixData,
@@ -495,8 +508,6 @@ void Hdf5File::writeCuboidToHyperSlab(const hid_t           dataset,
   }
 
   // Close memspace and filespace
-  H5Sclose(memspace);
-  H5Sclose(filespace);
 }// end of writeCuboidToHyperSlab
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -511,7 +522,6 @@ void Hdf5File::writeSensorByMaskToHyperSlab(const hid_t           dataset,
                                             const float*          matrixData)
 {
   herr_t status;
-  hid_t  filespace, memspace;
 
   constexpr int rank = 3;
 
@@ -525,7 +535,7 @@ void Hdf5File::writeSensorByMaskToHyperSlab(const hid_t           dataset,
 
 
   // Select hyperslab in the HDF5 dataset
-  filespace = H5Dget_space(dataset);
+  Hdf5Handle filespace(H5Dget_space(dataset), H5Sclose);
   status    = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offsetInDataset, nullptr, slabSize, nullptr);
   if (status < 0)
   {
@@ -533,7 +543,7 @@ void Hdf5File::writeSensorByMaskToHyperSlab(const hid_t           dataset,
   }
 
   // Assign 1D memspace and select the elements within the array
-  memspace = H5Screate_simple(1, &matrixSize, nullptr);
+  Hdf5Handle memspace(H5Screate_simple(1, &matrixSize, nullptr), H5Sclose);
   status   = H5Sselect_elements(memspace,
                                 H5S_SELECT_SET,
                                 indexSensorSize,
@@ -551,8 +561,6 @@ void Hdf5File::writeSensorByMaskToHyperSlab(const hid_t           dataset,
   }
 
   // Close memspace and filespace
-  H5Sclose(memspace);
-  H5Sclose(filespace);
 }// end of writeSensorByMaskToHyperSlab
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -568,7 +576,6 @@ void Hdf5File::writeScalarValue(const hid_t       parentGroup,
   const hsize_t dims[] = {1, 1, 1};
 
   hid_t  dataset   = H5I_INVALID_HID;
-  hid_t  dataspace = H5I_INVALID_HID;
   hid_t  datatype  = H5I_INVALID_HID;
   herr_t status;
 
@@ -589,7 +596,7 @@ void Hdf5File::writeScalarValue(const hid_t       parentGroup,
   }
   else
   { // Dataset does not exist yet -> create it
-    dataspace = H5Screate_simple(rank, dims, nullptr);
+    Hdf5Handle dataspace(H5Screate_simple(rank, dims, nullptr), H5Sclose);
     dataset   = H5Dcreate(parentGroup,
                           cDatasetName,
                           datatype,
@@ -605,6 +612,7 @@ void Hdf5File::writeScalarValue(const hid_t       parentGroup,
     throw ios::failure(Logger::formatMessage(kErrFmtCannotWriteDataset, cDatasetName));
   }
 
+  Hdf5Handle datasetOwner(dataset, H5Dclose);
   status = H5Dwrite(dataset, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &value);
   if (status < 0)
   {
@@ -737,9 +745,10 @@ DimensionSizes Hdf5File::getDatasetDimensionSizes(const hid_t       parentGroup,
 {
   const size_t ndims = getDatasetNumberOfDimensions(parentGroup, datasetName);
 
-  hsize_t dims[4] = {0, 0, 0, 0};
+  if (ndims != 3 && ndims != 4) throw ios::failure("Expected rank 3 or 4 dataset");
+  std::vector<hsize_t> dims(ndims);
 
-  herr_t status = H5LTget_dataset_info(parentGroup, datasetName.c_str(), dims, nullptr, nullptr);
+  herr_t status = H5LTget_dataset_info(parentGroup, datasetName.c_str(), dims.data(), nullptr, nullptr);
   if (status < 0)
   {
     throw ios::failure(Logger::formatMessage(kErrFmtCannotReadDataset, datasetName.c_str()));
@@ -780,15 +789,15 @@ size_t Hdf5File::getDatasetNumberOfDimensions(const hid_t       parentGroup,
 size_t Hdf5File::getDatasetSize(const hid_t       parentGroup,
                                 const MatrixName& datasetName)
 {
-  hsize_t dims[3] = {0, 0, 0};
+  std::vector<hsize_t> dims(getDatasetNumberOfDimensions(parentGroup, datasetName));
 
-  herr_t status = H5LTget_dataset_info(parentGroup, datasetName.c_str(), dims, nullptr, nullptr);
+  herr_t status = H5LTget_dataset_info(parentGroup, datasetName.c_str(), dims.data(), nullptr, nullptr);
   if (status < 0)
   {
     throw ios::failure(Logger::formatMessage(kErrFmtCannotReadDataset, datasetName.c_str()));
   }
 
-  return dims[0] * dims[1] * dims[2];
+  return std::accumulate(dims.begin(), dims.end(), size_t(1), std::multiplies<size_t>());
 }// end of getDatasetSize
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -896,15 +905,26 @@ string Hdf5File::readStringAttribute(const hid_t       parentGroup,
                                      const MatrixName& datasetName,
                                      const MatrixName& attributeName)
 {
-  char value[256] = "";
-  herr_t status = H5LTget_attribute_string(parentGroup, datasetName.c_str(), attributeName.c_str(), value);
-
-  if (status < 0)
+  Hdf5Handle attribute(H5Aopen_by_name(parentGroup, datasetName.c_str(), attributeName.c_str(), H5P_DEFAULT, H5P_DEFAULT), H5Aclose);
+  Hdf5Handle type(H5Aget_type(attribute), H5Tclose);
+  Hdf5Handle space(H5Aget_space(attribute), H5Sclose);
+  if (H5Tget_class(type) != H5T_STRING || H5Sget_simple_extent_npoints(space) != 1)
+    throw ios::failure("Expected one string attribute");
+  if (H5Tis_variable_str(type) > 0)
+  {
+    char* value = nullptr;
+    if (H5Aread(attribute, type, &value) < 0) throw ios::failure("Cannot read string attribute");
+    string result(value ? value : "");
+    H5free_memory(value);
+    return result;
+  }
+  std::vector<char> value(H5Tget_size(type) + 1, '\0');
+  if (H5Aread(attribute, type, value.data()) < 0)
   {
     throw ios::failure(Logger::formatMessage(kErrFmtCannotReadAttribute, attributeName.c_str(), datasetName.c_str()));
   }
 
-  return string(value);
+  return string(value.data());
 }// end of readIntAttribute
 //----------------------------------------------------------------------------------------------------------------------
 

@@ -90,28 +90,28 @@ __host__ void CudaMatrixContainer<size>::copyMatrixRecord(const MatrixContainer:
     case MT::kReal:
     {
       mMatrixContainer[int(matrixIdx)].floatData
-        = static_cast<RealMatrix*>(matrixRecord.matrixPtr)->getDeviceData();
+        = static_cast<RealMatrix*>(matrixRecord.matrixPtr.get())->getDeviceData();
       break;
     }
 
     case MT::kComplex:
     {
       mMatrixContainer[int(matrixIdx)].complexData
-        = static_cast<ComplexMatrix*>(matrixRecord.matrixPtr)->getComplexDeviceData();
+        = static_cast<ComplexMatrix*>(matrixRecord.matrixPtr.get())->getComplexDeviceData();
       break;
     }
 
     case MT::kCufft:
     {
       mMatrixContainer[int(matrixIdx)].complexData
-        = static_cast<CufftComplexMatrix*>(matrixRecord.matrixPtr)->getComplexDeviceData();
+        = static_cast<CufftComplexMatrix*>(matrixRecord.matrixPtr.get())->getComplexDeviceData();
       break;
     }
 
     case MT::kIndex:
     {
       mMatrixContainer[int(matrixIdx)].indexData
-        = static_cast<IndexMatrix*>(matrixRecord.matrixPtr)->getDeviceData();
+        = static_cast<IndexMatrix*>(matrixRecord.matrixPtr.get())->getDeviceData();
       break;
     }
 

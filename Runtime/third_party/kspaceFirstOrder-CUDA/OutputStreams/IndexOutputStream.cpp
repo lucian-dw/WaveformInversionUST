@@ -65,11 +65,8 @@ IndexOutputStream::IndexOutputStream(Hdf5File&            file,
 IndexOutputStream::~IndexOutputStream()
 {
   // Destroy sampling event
-  cudaCheckErrors(cudaEventDestroy(mEventSamplingFinished));
-
-  close();
-  // free memory
-  freeMemory();
+  cudaEventDestroy(mEventSamplingFinished);
+  if (mDataset != H5I_BADID) H5Dclose(mDataset);
 }// end of ~IndexOutputStream
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -224,7 +221,7 @@ void IndexOutputStream::flushRaw()
   if (mReduceOp == ReduceOperator::kNone)
   {
     // Make sure the data has been copied from the GPU
-    cudaEventSynchronize(mEventSamplingFinished);
+    cudaCheckErrors(cudaEventSynchronize(mEventSamplingFinished));
 
     // Only raw time series are flushed down to the disk every time step
     flushBufferToFile();

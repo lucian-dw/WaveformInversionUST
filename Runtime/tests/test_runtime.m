@@ -2,6 +2,35 @@ function test_runtime(backend)
 if nargin<1,backend='cpu';end
 root=fileparts(fileparts(mfilename('fullpath')));addpath(fullfile(root,'matlab'));wust_setup(backend);
 rng(7);x=(-15:15)*1e-3;y=x;[X,Y]=meshgrid(x,y);c=1500+30*exp(-(X.^2+Y.^2)/3e-5);
+if strcmp(backend,'gpu')
+    rhs=gpuArray(complex(zeros(2,2,'single')));
+    diagonal=gpuArray(complex(zeros(2,1,'single')));
+    offdiagonal=gpuArray(complex(zeros(1,1,'single')));
+    inverse=gpuArray(complex(zeros(2,2,2,'single')));
+    for bad={real(rhs),gpuArray(complex(zeros(2,2,2,2,'single')))}
+        rejected=false;
+        try
+            unused=applyBlockLU(bad{1},diagonal,offdiagonal,offdiagonal, ...
+                diagonal,offdiagonal,offdiagonal,inverse,false); %#ok<NASGU>
+        catch err
+            rejected=strcmp(err.identifier,'WUST:InvalidInput');
+        end
+        assert(rejected,'MEX must reject real storage and rank-4 input');
+    end
+    for bad={real(diagonal),gpuArray(complex(zeros(2,1,2,'single')))}
+        rejected=false;
+        try
+            unused=decompBlockLU(bad{1},offdiagonal,offdiagonal,rhs, ...
+                diagonal,diagonal,diagonal,offdiagonal,offdiagonal); %#ok<NASGU>
+        catch err
+            rejected=strcmp(err.identifier,'WUST:InvalidInput');
+        end
+        assert(rejected,'MEX decomposition must validate storage before access');
+    end
+end
+assert(isequal(ringingRemovalFilt(x,y,c,1500,1e5,0,4),c));
+filtered=ringingRemovalFilt(x,y,c,1500,1e5,.5,4);
+assert(all(isfinite(filtered(:))) && norm(filtered-c,'fro')>0);
 cfg=struct('backend',backend,'pml_m',.004,'pml_strength',10, ...
     'stencil_bounds',[1400,1700],'wavenumber','continuum','source_batch_size',2, ...
     'step_damping',.25,'max_update_mps',12,'bounds_mps',[1300,1800], ...

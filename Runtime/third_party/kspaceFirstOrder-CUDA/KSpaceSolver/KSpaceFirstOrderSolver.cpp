@@ -864,16 +864,12 @@ bool KSpaceFirstOrderSolver::isCheckpointInterruption() const
  */
 void KSpaceFirstOrderSolver::initializeCufftPlans()
 {
-  DimensionSizes fftDims = mParameters.getFullDimensionSizes();
-  if (std::getenv("KWAVE_NATIVE_SOURCE_BATCH") != nullptr)
-  {
-    fftDims.nz = mParameters.getPressureSourceIndexSize();
-  }
+  const SimulationLayout& layout = mParameters.getLayout();
   // Create real to complex plans
-  CufftComplexMatrix::createR2CFftPlanND(fftDims);
+  CufftComplexMatrix::createR2CFftPlanND(layout);
 
   // create complex to real plans
-  CufftComplexMatrix::createC2RFftPlanND(fftDims);
+  CufftComplexMatrix::createC2RFftPlanND(layout);
 
   // If necessary, create 1D shift plans.
   // In this case, the matrix has a bit bigger dimensions to be able to store shifted matrices.

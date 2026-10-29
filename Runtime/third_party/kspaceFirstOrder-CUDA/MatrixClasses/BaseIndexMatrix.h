@@ -31,6 +31,7 @@
 
 #ifndef BASE_INDEX_MATRIX_H
 #define BASE_INDEX_MATRIX_H
+#include <Utils/CudaBuffer.h>
 
 #include <MatrixClasses/BaseMatrix.h>
 #include <Utils/DimensionSizes.h>
@@ -122,6 +123,7 @@ class BaseIndexMatrix : public BaseMatrix
     size_t mCapacity;
 
     /// Raw CPU matrix data.
+    CudaBuffer<size_t> mBuffer;
     size_t* mHostData;
     /// Raw GPU matrix data.
     size_t* mDeviceData;

@@ -1,9 +1,7 @@
 import importlib.util
-import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -38,14 +36,12 @@ class Contracts(unittest.TestCase):
             h["p_source_input"] = np.arange(5, dtype=np.float32).reshape(5, 1, 1)
 
     def test_independent_sources_and_order(self):
-        with tempfile.TemporaryDirectory() as d, patch.dict(
-            os.environ, {"KWAVE_NATIVE_TX_INDICES_H5": "11,3,7"}
-        ):
+        with tempfile.TemporaryDirectory() as d:
             src = Path(d) / "a.h5"
             dst = Path(d) / "b.h5"
             self.make_input(src)
             before = src.read_bytes()
-            native.expand_input(src, dst, 3)
+            native.expand_input(src, dst, 3, source_indices=[11, 3, 7])
             self.assertEqual(before, src.read_bytes())
             with h5py.File(dst) as h:
                 np.testing.assert_array_equal(
@@ -65,14 +61,27 @@ class Contracts(unittest.TestCase):
                 with h5py.File(src, "r+") as h:
                     h[key][...] = value
                 with self.assertRaises(ValueError):
-                    native.expand_input(src, Path(d) / "b.h5", 3)
-        with tempfile.TemporaryDirectory() as d, patch.dict(
-            os.environ, {"KWAVE_NATIVE_TX_INDICES_H5": "3,3,7"}
-        ):
+                    native.expand_input(src, Path(d) / "b.h5", 3, colocated=True)
+                self.assertFalse((Path(d) / "b.h5").exists())
+        with tempfile.TemporaryDirectory() as d:
             src = Path(d) / "a.h5"
             self.make_input(src)
             with self.assertRaises(ValueError):
-                native.expand_input(src, Path(d) / "b.h5", 3)
+                native.expand_input(src, Path(d) / "b.h5", 3, source_indices=[3, 3, 7])
+            self.assertFalse((Path(d) / "b.h5").exists())
+
+    def test_no_implicit_colocation(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = Path(d) / "a.h5", Path(d) / "b.h5"
+            self.make_input(src)
+            with self.assertRaisesRegex(ValueError, "explicit source_indices"):
+                native.expand_input(src, dst, 3)
+            self.assertFalse(dst.exists())
+            native.expand_input(src, dst, 3, colocated=True)
+            with h5py.File(dst) as handle:
+                np.testing.assert_array_equal(
+                    handle["p_source_index"][...].ravel(), [3, 55, 107]
+                )
 
     def test_no_overwrite(self):
         with tempfile.TemporaryDirectory() as d:

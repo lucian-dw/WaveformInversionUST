@@ -128,11 +128,6 @@ std::map<Parameters::ParameterNameIdx, MatrixName> Parameters::sParameterHdf5Nam
 //---------------------------------------------------- Variables -----------------------------------------------------//
 //--------------------------------------------------------------------------------------------------------------------//
 
-// Initialization of the singleton instance flag
-bool Parameters::sParametersInstanceFlag   = false;
-
-// Initialization of the instance
-Parameters* Parameters::sPrametersInstance = nullptr;
 
 //--------------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------- Public methods ---------------------------------------------------//
@@ -141,15 +136,7 @@ Parameters* Parameters::sPrametersInstance = nullptr;
 /**
  * Destructor.
  */
-Parameters::~Parameters()
-{
-  sParametersInstanceFlag = false;
-  if (sPrametersInstance)
-  {
-    delete sPrametersInstance;
-  }
-  sPrametersInstance = nullptr;
-};
+Parameters::~Parameters() = default;
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -157,16 +144,8 @@ Parameters::~Parameters()
  */
 Parameters& Parameters::getInstance()
 {
-  if(!sParametersInstanceFlag)
-  {
-    sPrametersInstance = new Parameters();
-    sParametersInstanceFlag = true;
-    return *sPrametersInstance;
-  }
-  else
-  {
-    return *sPrametersInstance;
-  }
+  static Parameters instance;
+  return instance;
 }// end of getInstance()
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -177,11 +156,6 @@ void Parameters::init(int argc, char** argv)
 {
   mCommandLineParameters.parseCommandLine(argc, argv);
 
-  if (getGitHash() != "")
-  {
-    Logger::log(Logger::LogLevel::kFull, kOutFmtGitHashLeft, getGitHash().c_str());
-    Logger::log(Logger::LogLevel::kFull, kOutFmtSeparator);
-  }
   if (mCommandLineParameters.isPrintVersionOnly())
   {
     return;
@@ -195,8 +169,7 @@ void Parameters::init(int argc, char** argv)
     mNt = mCommandLineParameters.getBenchmarkTimeStepsCount();
   }
 
-  if ((mCommandLineParameters.getSamplingStartTimeIndex() >= mNt) ||
-      (mCommandLineParameters.getSamplingStartTimeIndex() < 0))
+  if (mCommandLineParameters.getSamplingStartTimeIndex() >= mNt)
   {
     throw std::invalid_argument(Logger::formatMessage(kErrFmtIllegalSamplingStartTimeStep, 1l, mNt));
   }
@@ -578,6 +551,13 @@ void Parameters::readScalarsFromInputFile()
     mPressureSourceMany = 0;
     mPressureSourceIndexSize = 0;
   }
+  mLayout.physical = getFullDimensionSizes();
+  mLayout.spectrum = getReducedDimensionSizes();
+  const bool batch = std::getenv("KWAVE_NATIVE_SOURCE_BATCH") != nullptr;
+  mLayout.batchCount = batch ? mPressureSourceIndexSize : 1;
+  if (batch && (isSimulation3D() || mLayout.batchCount < 2 ||
+                 getAbsorbingFlag() != AbsorptionType::kLossless))
+    throw std::invalid_argument("Native source batch requires 2D, batch>=2, lossless input");
 }// end of readScalarsFromInputFile
 //----------------------------------------------------------------------------------------------------------------------
 

@@ -176,15 +176,8 @@ void MatrixContainer::init()
   DimensionSizes fullDims    = params.getFullDimensionSizes();
   DimensionSizes reducedDims = params.getReducedDimensionSizes();
 
-  const bool nativeBatchEnabled = std::getenv("KWAVE_NATIVE_SOURCE_BATCH") != nullptr;
-  const size_t nativeBatchSize = nativeBatchEnabled ? params.getPressureSourceIndexSize() : 1u;
-  if (nativeBatchEnabled && (params.isSimulation3D() || nativeBatchSize < 2u ||
-                             params.getAbsorbingFlag() != Parameters::AbsorptionType::kLossless))
-  {
-    throw std::invalid_argument("Native source batch currently requires 2D, batch>=2, lossless input");
-  }
-  DimensionSizes dynamicFullDims(fullDims.nx, fullDims.ny, nativeBatchSize);
-  DimensionSizes dynamicReducedDims(reducedDims.nx, reducedDims.ny, nativeBatchSize);
+  const DimensionSizes dynamicFullDims = params.getLayout().field();
+  const DimensionSizes dynamicReducedDims = params.getLayout().fieldSpectrum();
 
   const bool isSimulation3D  = params.isSimulation3D();
 
@@ -512,25 +505,25 @@ void MatrixContainer::createMatrices()
     {
       case MatrixType::kReal:
       {
-        it.second.matrixPtr = new RealMatrix(it.second.dimensionSizes);
+        it.second.matrixPtr.reset(new RealMatrix(it.second.dimensionSizes));
         break;
       }
 
       case MatrixType::kComplex:
       {
-        it.second.matrixPtr = new ComplexMatrix(it.second.dimensionSizes);
+        it.second.matrixPtr.reset(new ComplexMatrix(it.second.dimensionSizes));
         break;
       }
 
       case MatrixType::kIndex:
       {
-        it.second.matrixPtr = new IndexMatrix(it.second.dimensionSizes);
+        it.second.matrixPtr.reset(new IndexMatrix(it.second.dimensionSizes));
         break;
       }
 
       case MatrixType::kCufft:
       {
-        it.second.matrixPtr = new CufftComplexMatrix(it.second.dimensionSizes);
+        it.second.matrixPtr.reset(new CufftComplexMatrix(it.second.dimensionSizes));
         break;
       }
 
@@ -551,11 +544,7 @@ void MatrixContainer::freeMatrices()
 {
   for (auto& it : mContainer)
   {
-    if (it.second.matrixPtr)
-    {
-      delete it.second.matrixPtr;
-      it.second.matrixPtr = nullptr;
-    }
+    it.second.matrixPtr.reset();
   }
 }// end of freeMatrices
 //----------------------------------------------------------------------------------------------------------------------

@@ -16,25 +16,24 @@ import h5py
 import numpy as np
 
 
-def copy_attrs(target: h5py.Dataset, source: h5py.Dataset) -> None:
-    for key, value in source.attrs.items():
-        target.attrs[key] = value
-
-
 def expand_input(
-    source_path: Path, target_path: Path, batch_size: int
+    source_path: Path,
+    target_path: Path,
+    batch_size: int,
+    *,
+    source_indices=None,
+    colocated=False,
 ) -> dict[str, object]:
     if source_path.resolve() == target_path.resolve() or target_path.exists():
         raise ValueError("Expansion requires a new file, never mutate source input")
     if batch_size < 1:
         raise ValueError("Positive batch required")
-    shutil.copyfile(source_path, target_path)
     with h5py.File(source_path, "r") as source:
         source_index_attrs = dict(source["p_source_index"].attrs)
         source_input_attrs = dict(source["p_source_input"].attrs)
         sensor_attrs = dict(source["sensor_mask_index"].attrs)
 
-    with h5py.File(target_path, "r+") as handle:
+    with h5py.File(source_path, "r") as handle:
         nx = int(np.asarray(handle["Nx"][...]).reshape(-1)[0])
         ny = int(np.asarray(handle["Ny"][...]).reshape(-1)[0])
         nz = int(np.asarray(handle["Nz"][...]).reshape(-1)[0])
@@ -66,7 +65,7 @@ def expand_input(
         sensor = (
             np.asarray(handle["sensor_mask_index"][...]).reshape(-1).astype(np.uint64)
         )
-        if batch_size > sensor.size:
+        if colocated and batch_size > sensor.size:
             raise ValueError(
                 f"batch {batch_size} exceeds colocated sensor count {sensor.size}"
             )
@@ -79,18 +78,23 @@ def expand_input(
         waveform = (
             np.asarray(handle["p_source_input"][...]).reshape(-1).astype(np.float32)
         )
-        explicit_sources = os.environ.get("KWAVE_NATIVE_TX_INDICES_H5", "").strip()
-        if explicit_sources:
-            physical_sources = np.asarray(
-                [int(value) for value in explicit_sources.split(",") if value],
-                dtype=np.uint64,
-            )
+        if source_indices is not None:
+            if colocated:
+                raise ValueError("select source_indices or colocated, not both")
+            raw_sources = np.asarray(source_indices)
+            if raw_sources.ndim != 1 or raw_sources.dtype.kind not in "iu":
+                raise ValueError(
+                    "source_indices must be a one-dimensional integer array"
+                )
+            physical_sources = raw_sources.astype(np.uint64)
             if physical_sources.size != batch_size:
                 raise ValueError(
                     f"explicit source count {physical_sources.size} != batch size {batch_size}"
                 )
-        else:
+        elif colocated:
             physical_sources = sensor[:batch_size]
+        else:
+            raise ValueError("explicit source_indices or colocated=True is required")
         for indices in (sensor, physical_sources):
             if (
                 np.any(indices < 1)
@@ -105,6 +109,9 @@ def expand_input(
             [sensor + index * field_elements for index in range(batch_size)]
         ).astype(np.uint64, copy=False)
 
+    # Only create a target after validating physics and every index.
+    shutil.copyfile(source_path, target_path)
+    with h5py.File(target_path, "r+") as handle:
         for name in ("p_source_index", "p_source_input", "sensor_mask_index"):
             del handle[name]
         source_index_ds = handle.create_dataset(
@@ -147,23 +154,31 @@ def main() -> int:
     parser.add_argument("--native-binary", required=True)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--receipt", default="")
+    parser.add_argument("--source-indices", type=int, nargs="+")
+    parser.add_argument("--colocated", action="store_true")
+    parser.add_argument("-i", dest="input", type=Path, required=True)
+    parser.add_argument("-o", dest="output", type=Path, required=True)
     known, solver_args = parser.parse_known_args()
-    try:
-        input_pos = solver_args.index("-i") + 1
-        output_pos = solver_args.index("-o") + 1
-    except (ValueError, IndexError) as exc:
-        raise ValueError(
-            "solver arguments must contain -i INPUT and -o OUTPUT"
-        ) from exc
-
-    input_path = Path(solver_args[input_pos]).resolve()
-    output_path = Path(solver_args[output_pos]).resolve()
+    input_path = known.input.resolve()
+    output_path = known.output.resolve()
+    # MATLAB's binary launcher transports explicit TX indices through its environment.
+    source_indices = known.source_indices
+    if source_indices is None and os.environ.get("KWAVE_NATIVE_TX_INDICES_H5"):
+        source_indices = [
+            int(v) for v in os.environ["KWAVE_NATIVE_TX_INDICES_H5"].split(",")
+        ]
     with tempfile.TemporaryDirectory(
         prefix="kwave_native_batch_", dir=str(input_path.parent)
     ) as temp_dir:
         expanded_path = Path(temp_dir) / "native_batch_input.h5"
-        receipt = expand_input(input_path, expanded_path, known.batch_size)
-        solver_args[input_pos] = str(expanded_path)
+        receipt = expand_input(
+            input_path,
+            expanded_path,
+            known.batch_size,
+            source_indices=source_indices,
+            colocated=known.colocated,
+        )
+        solver_args = ["-i", str(expanded_path), "-o", str(output_path), *solver_args]
         environment = os.environ.copy()
         environment["KWAVE_NATIVE_SOURCE_BATCH"] = "1"
         environment.setdefault("OMP_NUM_THREADS", "4")

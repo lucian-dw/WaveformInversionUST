@@ -133,7 +133,7 @@ ErrorMessage  kErrFmtMatrixNotComplex
 //------------------------------------------------ Matrix Container --------------------------------------------------//
 /// Matrix container error message.
 ErrorMessage  kErrFmtBadMatrixType
-  = "Error: Matrix %s cannot be created due to unknown type. [File, Line] : [%s,%d].";
+  = "Error: Matrix %s cannot be created due to unknown type.";
 
 /// Matrix container error message.
 ErrorMessage  kErrFmtRelocationError

@@ -1,12 +1,12 @@
 /*
  * This MEX file uses the mxGPUArray API with CUDA and CUBLAS to apply
  * the block LU decomposition of the 9-point Helmholtz equation.
- * 
+ *
  * This was initially implemented in MATLAB using the following code:
- * 
+ *
  * % Test if Block LU Decomposition Works
  * SRC = gpuArray(single(SRC));
- * u = complex(zeros(Ny, Nx, num_sources, 'single', 'gpuArray')); 
+ * u = complex(zeros(Ny, Nx, num_sources, 'single', 'gpuArray'));
  * if adjHelmholtzEqn
  *     % Apply to Adjoint Helmholtz Solve
  *     for j = 2:Nx % Forward Pass
@@ -27,7 +27,7 @@
  *     for j = Nx-1:-1:1 % Backward Pass
  *         u(:,j,:) = u(:,j,:) - pagemtimes(invT(:,:,j), ...
  *             triDiagMultLeftGPUmex(Ud(:,j), Ul(:,j), Uu(:,j), u(:,j+1,:)));
- *     end; u = gather(u);  
+ *     end; u = gather(u);
  * end
  *
  * See the separate triDiagMultLeftGPUmex.cu file for additional details
@@ -45,36 +45,6 @@
 #include "cublas_v2.h" // To compile: mexcuda -lcublas applyBlockLU.cu
 #include "block_lu_mex_utils.h"
 
-/* Helpful Operator Overloading -- Using cuComplex.h */
-inline __host__ __device__ cuFloatComplex operator*(cuFloatComplex a, cuFloatComplex b) {
-    return cuCmulf(a,b);
-}
-inline __host__ __device__ void operator*=(cuFloatComplex &a, cuFloatComplex b) {
-    const float2 c = a * b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator/(cuFloatComplex a, cuFloatComplex b) {
-    return cuCdivf(a,b);
-}
-inline __host__ __device__ void operator/=(cuFloatComplex &a, cuFloatComplex b) {
-    const float2 c = a / b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator+(cuFloatComplex a, cuFloatComplex b) {
-    return cuCaddf(a,b);
-}
-inline __host__ __device__ void operator+=(cuFloatComplex &a, cuFloatComplex b) {
-    const float2 c = a + b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator-(cuFloatComplex a, cuFloatComplex b) {
-    return cuCsubf(a,b);
-}
-inline __host__ __device__ void operator-=(cuFloatComplex &a, cuFloatComplex b) {
-    const float2 c = a - b;
-    a.x = c.x; a.y = c.y;
-}
-
 /* Constant Values */
 const unsigned int threadsPerBlock1D = 32;
 const cublasOperation_t noTranspose = CUBLAS_OP_N;
@@ -86,10 +56,10 @@ void __global__ applyL(cuComplex const * __restrict__ SRC,
                        cuComplex const * __restrict__ Ll,
                        cuComplex const * __restrict__ Lu,
                        cuComplex const * __restrict__ u,
-                       cuComplex * __restrict__ tmp, int x_idx, 
+                       cuComplex * __restrict__ tmp, int x_idx,
                        int const Nx, int const Ny,
                        int const numSources)
-{   
+{
     /* Shared memory for loading A from global memory */
     __shared__ cuComplex su[threadsPerBlock1D][threadsPerBlock1D+2];
     /* Calculate the global linear index, assuming a 1-d grid. */
@@ -101,26 +71,29 @@ void __global__ applyL(cuComplex const * __restrict__ SRC,
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = u[row_idx - Ny];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (y_idx != 0) ) 
+        if ( (threadIdx.y == 0) && (y_idx != 0) )
             su[threadIdx.x][threadIdx.y] = u[row_idx - Ny - 1];
         else if ( (threadIdx.y == blockDim.y-1) && (y_idx != Ny-1) )
             su[threadIdx.x][threadIdx.y+2] = u[row_idx - Ny + 1];
-        __syncthreads();
+    }
+    __syncthreads();
+    if (y_idx < Ny && src_idx < numSources) {
+        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] - 
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] + 
-                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]); 
+            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] - 
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] + 
-                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y]); 
+            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y]);
         } else {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] - 
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] + 
-                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y] + 
-                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]); 
-        } 
+            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y] +
+                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
+        }
     }
 }
 
@@ -131,14 +104,14 @@ void applyInvTpostL(cublasHandle_t handle,
                     cuComplex * const u, int x_idx,
                     int const Nx, int const Ny,
                     int const numSources)
-{   
+{
     /* Scalars for cuBLAS GEMM call*/
     cuComplex alpha = make_cuFloatComplex(1,0);
     cuComplex beta = make_cuFloatComplex(0,0);
-    
+
     /* Run cuBLAS GEMM code */
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, noTranspose, noTranspose,
-                  Ny, numSources, Ny, 
+                  Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
                   &beta, &u[Ny*x_idx], Nx*Ny)); //u[y_idx + Ny*x_idx + Nx*Ny*src_idx] = res
 }
@@ -148,10 +121,10 @@ void __global__ applyU(cuComplex const * __restrict__ Ud,
                        cuComplex const * __restrict__ Ul,
                        cuComplex const * __restrict__ Uu,
                        cuComplex const * __restrict__ u,
-                       cuComplex * __restrict__ tmp, int x_idx, 
+                       cuComplex * __restrict__ tmp, int x_idx,
                        int const Nx, int const Ny,
                        int const numSources)
-{   
+{
     /* Shared memory for loading A from global memory */
     __shared__ cuComplex su[threadsPerBlock1D][threadsPerBlock1D+2];
     /* Calculate the global linear index, assuming a 1-d grid. */
@@ -163,26 +136,29 @@ void __global__ applyU(cuComplex const * __restrict__ Ud,
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = u[row_idx + Ny];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (y_idx != 0) ) 
+        if ( (threadIdx.y == 0) && (y_idx != 0) )
             su[threadIdx.x][threadIdx.y] = u[row_idx + Ny - 1];
         else if ( (threadIdx.y == blockDim.y-1) && (y_idx != Ny-1) )
             su[threadIdx.x][threadIdx.y+2] = u[row_idx + Ny + 1];
-        __syncthreads();
+    }
+    __syncthreads();
+    if (y_idx < Ny && src_idx < numSources) {
+        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] = 
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] + 
-                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]); 
+            tmp[y_idx + Ny*src_idx] =
+                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
-            tmp[y_idx + Ny*src_idx] = 
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] + 
-                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y]); 
+            tmp[y_idx + Ny*src_idx] =
+                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y]);
         } else {
-            tmp[y_idx + Ny*src_idx] = 
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] + 
-                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y] + 
-                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]); 
-        } 
+            tmp[y_idx + Ny*src_idx] =
+                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y] +
+                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
+        }
     }
 }
 
@@ -193,14 +169,14 @@ void applyInvTpostU(cublasHandle_t handle,
                     cuComplex * const u, int x_idx,
                     int const Nx, int const Ny,
                     int const numSources)
-{   
+{
     /* Scalars for cuBLAS GEMM call*/
     cuComplex alpha = make_cuFloatComplex(-1,0); // -= res
     cuComplex beta = make_cuFloatComplex(1,0); // -= res
-    
+
     /* Run cuBLAS GEMM code */
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, noTranspose, noTranspose,
-                  Ny, numSources, Ny, 
+                  Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
                   &beta, &u[Ny*x_idx], Nx*Ny)); //u[y_idx + Ny*x_idx + Nx*Ny*src_idx] -= res
 }
@@ -211,10 +187,10 @@ void __global__ applyUadj(cuComplex const * __restrict__ SRC,
                           cuComplex const * __restrict__ Ul,
                           cuComplex const * __restrict__ Uu,
                           cuComplex * __restrict__ u,
-                          cuComplex const * __restrict__ tmp, int x_idx, 
+                          cuComplex const * __restrict__ tmp, int x_idx,
                           int const Nx, int const Ny,
                           int const numSources)
-{   
+{
     /* Shared memory for loading A from global memory */
     __shared__ cuComplex su[threadsPerBlock1D][threadsPerBlock1D+2];
     /* Calculate the global linear index, assuming a 1-d grid. */
@@ -226,26 +202,29 @@ void __global__ applyUadj(cuComplex const * __restrict__ SRC,
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = tmp[y_idx + Ny*src_idx];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (y_idx != 0) ) 
+        if ( (threadIdx.y == 0) && (y_idx != 0) )
             su[threadIdx.x][threadIdx.y] = tmp[y_idx + Ny*src_idx - 1];
         else if ( (threadIdx.y == blockDim.y-1) && (y_idx != Ny-1) )
             su[threadIdx.x][threadIdx.y+2] = tmp[y_idx + Ny*src_idx + 1];
-        __syncthreads();
+    }
+    __syncthreads();
+    if (y_idx < Ny && src_idx < numSources) {
+        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]); 
+                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y]); 
+                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y]);
         } else {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y] + 
-                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]); 
-        } 
+                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y] +
+                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
+        }
     }
 }
 
@@ -256,28 +235,27 @@ void applyInvTpreU(cublasHandle_t handle,
                    cuComplex const * const u, int x_idx,
                    int const Nx, int const Ny,
                    int const numSources)
-{   
+{
     /* Scalars for cuBLAS GEMM call*/
-    cuComplex alpha = make_cuFloatComplex(1,0); 
-    cuComplex beta = make_cuFloatComplex(0,0); 
-    
+    cuComplex alpha = make_cuFloatComplex(1,0);
+    cuComplex beta = make_cuFloatComplex(0,0);
+
     /* Run cuBLAS GEMM code */
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, conjugateTranspose, noTranspose,
-                  Ny, numSources, Ny, 
+                  Ny, numSources, Ny,
                   &alpha, invT, Ny, &u[Ny*(x_idx-1)], Nx*Ny,
-                  &beta, tmp, Ny)); 
+                  &beta, tmp, Ny));
 }
-
 
 /* Device code - Apply L Block (Adjoint) */
 void __global__ applyLadj(cuComplex const * __restrict__ Ld,
                           cuComplex const * __restrict__ Ll,
                           cuComplex const * __restrict__ Lu,
                           cuComplex const * __restrict__ u,
-                          cuComplex * __restrict__ tmp, int x_idx, 
+                          cuComplex * __restrict__ tmp, int x_idx,
                           int const Nx, int const Ny,
                           int const numSources)
-{   
+{
     /* Shared memory for loading A from global memory */
     __shared__ cuComplex su[threadsPerBlock1D][threadsPerBlock1D+2];
     /* Calculate the global linear index, assuming a 1-d grid. */
@@ -287,28 +265,31 @@ void __global__ applyLadj(cuComplex const * __restrict__ Ld,
         /* Indexing */
         unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         // Regular Entries
-        su[threadIdx.x][threadIdx.y+1] = u[row_idx + Ny]; 
+        su[threadIdx.x][threadIdx.y+1] = u[row_idx + Ny];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (y_idx != 0) ) 
-            su[threadIdx.x][threadIdx.y] = u[row_idx + Ny - 1]; 
+        if ( (threadIdx.y == 0) && (y_idx != 0) )
+            su[threadIdx.x][threadIdx.y] = u[row_idx + Ny - 1];
         else if ( (threadIdx.y == blockDim.y-1) && (y_idx != Ny-1) )
-            su[threadIdx.x][threadIdx.y+2] = u[row_idx + Ny + 1]; 
-        __syncthreads();
+            su[threadIdx.x][threadIdx.y+2] = u[row_idx + Ny + 1];
+    }
+    __syncthreads();
+    if (y_idx < Ny && src_idx < numSources) {
+        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] = u[row_idx] - 
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]); 
+            tmp[y_idx + Ny*src_idx] = u[row_idx] -
+                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
             tmp[y_idx + Ny*src_idx] = u[row_idx] -
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y]); 
+                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y]);
         } else {
             tmp[y_idx + Ny*src_idx] = u[row_idx] -
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] + 
-                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y] + 
-                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]); 
-        } 
+                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y] +
+                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
+        }
     }
 }
 
@@ -319,27 +300,25 @@ void applyInvTpostLadj(cublasHandle_t handle,
                        cuComplex * const u, int x_idx,
                        int const Nx, int const Ny,
                        int const numSources)
-{   
+{
     /* Scalars for cuBLAS GEMM call*/
-    cuComplex alpha = make_cuFloatComplex(1,0); 
-    cuComplex beta = make_cuFloatComplex(0,0); 
-    
+    cuComplex alpha = make_cuFloatComplex(1,0);
+    cuComplex beta = make_cuFloatComplex(0,0);
+
     /* Run cuBLAS GEMM code */
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, conjugateTranspose, noTranspose,
-                  Ny, numSources, Ny, 
+                  Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
-                  &beta, &u[Ny*x_idx], Nx*Ny)); 
+                  &beta, &u[Ny*x_idx], Nx*Ny));
 }
-
-
 
 /*
  * Host code
  */
 #ifndef USCT_FACTORS_BACKEND
-void mexFunction(int nlhs, mxArray *plhs[],
-                 int nrhs, mxArray const *prhs[])
+void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
+    WustMexResources resources;
     /* Declare all variables.*/
     mxGPUArray const *SRC;
     mxGPUArray const *Ld;
@@ -374,45 +353,63 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Throw an error if the input is not a GPU array. */
     if (nlhs != 1) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidOutput", 
+        wustFail("WUST:InvalidOutput",
                           "applyBlockLU requires exactly one output.");
     }
-    if ( (nrhs!=9) || 
-        !(mxIsGPUArray(prhs[0])) || 
-        !(mxIsGPUArray(prhs[1])) || 
-        !(mxIsGPUArray(prhs[2])) || 
-        !(mxIsGPUArray(prhs[3])) || 
-        !(mxIsGPUArray(prhs[4])) || 
-        !(mxIsGPUArray(prhs[5])) || 
-        !(mxIsGPUArray(prhs[6])) || 
+    if ( (nrhs!=9) ||
+        !(mxIsGPUArray(prhs[0])) ||
+        !(mxIsGPUArray(prhs[1])) ||
+        !(mxIsGPUArray(prhs[2])) ||
+        !(mxIsGPUArray(prhs[3])) ||
+        !(mxIsGPUArray(prhs[4])) ||
+        !(mxIsGPUArray(prhs[5])) ||
+        !(mxIsGPUArray(prhs[6])) ||
         !(mxIsGPUArray(prhs[7])) ||
         !(mxIsLogicalScalar(prhs[8])) ) {
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
+        wustFail("WUST:InvalidInput",
                           "Invalid input to triDiagMultLeftGPUmex: Inputs 1-8 should be gpuArray. Input 9 should be a boolean.");
     }
 
     /* Assemble GPU Arrays from Inputs */
-    SRC = mxGPUCreateFromMxArray(prhs[0]);
-    Ld = mxGPUCreateFromMxArray(prhs[1]);
-    Ll = mxGPUCreateFromMxArray(prhs[2]);
-    Lu = mxGPUCreateFromMxArray(prhs[3]);
-    Ud = mxGPUCreateFromMxArray(prhs[4]);
-    Ul = mxGPUCreateFromMxArray(prhs[5]);
-    Uu = mxGPUCreateFromMxArray(prhs[6]);
-    invT = mxGPUCreateFromMxArray(prhs[7]);
+    SRC = resources.input(prhs[0]);
+    Ld = resources.input(prhs[1]);
+    Ll = resources.input(prhs[2]);
+    Lu = resources.input(prhs[3]);
+    Ud = resources.input(prhs[4]);
+    Ul = resources.input(prhs[5]);
+    Uu = resources.input(prhs[6]);
+    invT = resources.input(prhs[7]);
     adjHelmholtzEqn = (bool)(*mxGetLogicals(prhs[8]));
-    
+    const mxGPUArray* inputs[] = {SRC, Ld, Ll, Lu, Ud, Ul, Uu, invT};
+    bool valid_storage = true;
+    for (int index = 0; index < 8; ++index) {
+        const mwSize rank = mxGPUGetNumberOfDimensions(inputs[index]);
+        valid_storage = valid_storage && rank >= 2 && rank <= 3 &&
+            mxGPUGetClassID(inputs[index]) == mxSINGLE_CLASS &&
+            mxGPUGetComplexity(inputs[index]) == mxCOMPLEX;
+        if (index > 0 && index < 7) {
+            valid_storage = valid_storage && rank == 2;
+        }
+    }
+    valid_storage = valid_storage && mxGPUGetNumberOfDimensions(invT) == 3 &&
+        mxGPUGetDimensions(SRC)[0] >= 2 && mxGPUGetDimensions(SRC)[1] >= 2 &&
+        mxGPUGetNumberOfElements(SRC) > 0 &&
+        mxGPUGetNumberOfElements(SRC) <= 2147483647;
+    if (!valid_storage) {
+
+        wustFail("WUST:InvalidInput", "Expected complex-single GPU arrays with 2D blocks and 3D inverse blocks/RHS pages.");
+    }
 
     /* Error Checking with Array Dimensions */
     dims_SRC = mxGPUGetDimensions(SRC);
-    Ny = (int) dims_SRC[0]; 
-    Nx = (int) dims_SRC[1]; 
+    Ny = (int) dims_SRC[0];
+    Nx = (int) dims_SRC[1];
     num_sources = ((int)mxGPUGetNumberOfElements(SRC))/(Nx*Ny);
-    if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 || 
-        mxGPUGetDimensions(Ll)[0] != Ny-1 || mxGPUGetDimensions(Ll)[1] != Nx-1 || 
-        mxGPUGetDimensions(Lu)[0] != Ny-1 || mxGPUGetDimensions(Lu)[1] != Nx-1 || 
-        mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 || 
-        mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 || 
+    if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 ||
+        mxGPUGetDimensions(Ll)[0] != Ny-1 || mxGPUGetDimensions(Ll)[1] != Nx-1 ||
+        mxGPUGetDimensions(Lu)[0] != Ny-1 || mxGPUGetDimensions(Lu)[1] != Nx-1 ||
+        mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 ||
+        mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 ||
         mxGPUGetDimensions(Uu)[0] != Ny-1 || mxGPUGetDimensions(Uu)[1] != Nx-1 ||
         mxGPUGetDimensions(invT)[0] != Ny || mxGPUGetDimensions(invT)[1] != Ny || mxGPUGetDimensions(invT)[2] != Nx) {
         printf("Ny = %d\n", Ny);
@@ -430,23 +427,23 @@ void mexFunction(int nlhs, mxArray *plhs[],
         printf("Number of Columns in Ul = %d\n", (int)mxGPUGetDimensions(Ul)[1]);
         printf("Number of Rows in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[0]);
         printf("Number of Columns in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[1]);
-        printf("invT is %d x %d x %d\n", (int)mxGPUGetDimensions(invT)[0], 
-                                         (int)mxGPUGetDimensions(invT)[1], 
+        printf("invT is %d x %d x %d\n", (int)mxGPUGetDimensions(invT)[0],
+                                         (int)mxGPUGetDimensions(invT)[1],
                                          (int)mxGPUGetDimensions(invT)[2]);
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
-                          "Invalid input to triDiagMultLeftGPUmex: Input sizes incorrect");
+
+        wustFail("WUST:InvalidInput", "Inconsistent Block-LU input shapes.");
     }
 
     /* Verify that each array is a single array before extracting the pointer. */
-    if (mxGPUGetClassID(SRC) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Ld) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Ll) != mxSINGLE_CLASS || 
+    if (mxGPUGetClassID(SRC) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ld) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ll) != mxSINGLE_CLASS ||
         mxGPUGetClassID(Lu) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Ud) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Ul) != mxSINGLE_CLASS || 
+        mxGPUGetClassID(Ud) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ul) != mxSINGLE_CLASS ||
         mxGPUGetClassID(Uu) != mxSINGLE_CLASS ||
         mxGPUGetClassID(invT) != mxSINGLE_CLASS) {
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
+        wustFail("WUST:InvalidInput",
                           "Invalid input to triDiagMultLeftGPUmex: Inputs should all be single precision");
     }
 
@@ -464,7 +461,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
     d_invT = (cuComplex const *)(mxGPUGetDataReadOnly(invT));
 
     /* Create a GPUArray to hold the result and get its underlying pointer. */
-    u = mxGPUCreateGPUArray(mxGPUGetNumberOfDimensions(SRC),
+    u = resources.array(mxGPUGetNumberOfDimensions(SRC),
                             mxGPUGetDimensions(SRC),
                             mxGPUGetClassID(SRC),
                             mxGPUGetComplexity(SRC),
@@ -473,7 +470,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Create a GPUArray to hold the intermediate result. */
     const mwSize dims[] = {(mwSize)Ny, (mwSize)num_sources};
-    tmp = mxGPUCreateGPUArray(2, dims,
+    tmp = resources.array(2, dims,
                               mxGPUGetClassID(SRC),
                               mxGPUGetComplexity(SRC),
                               MX_GPU_DO_NOT_INITIALIZE);
@@ -490,7 +487,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Code to call cuBLAS */
     cublasHandle_t handle; // handle
-    USCT_CUBLAS_CHECK(cublasCreate(&handle));
+    USCT_CUBLAS_CHECK(resources.create(&handle));
 
     /* Whether applying forward or adjoint Helmholtz solver */
     if (adjHelmholtzEqn) { // Adjoint Helmholtz Solver
@@ -498,14 +495,14 @@ void mexFunction(int nlhs, mxArray *plhs[],
         for (int x_idx = 1; x_idx < Nx; x_idx++) {
             // Apply Block LU to Propagate Forward on Grid
             applyInvTpreU(handle, &d_invT[Ny*Ny*(x_idx-1)], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
-            applyUadj<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ud, d_Ul, d_Uu, 
-                 d_u, d_tmp, x_idx, Nx, Ny, num_sources); 
+            applyUadj<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ud, d_Ul, d_Uu,
+                 d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
         }
         /* Backward propagation on grid */
         for (int x_idx = Nx-2; x_idx >= 0; x_idx--) {
             // Apply Block LU to Propagate Backward on Grid
-            applyLadj<<<dimGridBP, dimBlockBP>>>(d_Ld, d_Ll, d_Lu, 
+            applyLadj<<<dimGridBP, dimBlockBP>>>(d_Ld, d_Ll, d_Lu,
                  d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
             applyInvTpostLadj(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
@@ -514,25 +511,24 @@ void mexFunction(int nlhs, mxArray *plhs[],
         /* Forward propagation on grid */
         for (int x_idx = 1; x_idx < Nx; x_idx++) {
             // Apply Block LU to Propagate Forward on Grid
-            applyL<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ld, d_Ll, d_Lu, 
-                 d_u, d_tmp, x_idx, Nx, Ny, num_sources); 
+            applyL<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ld, d_Ll, d_Lu,
+                 d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
             applyInvTpostL(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
         }
         /* Backward propagation on grid */
         for (int x_idx = Nx-2; x_idx >= 0; x_idx--) {
             // Apply Block LU to Propagate Backward on Grid
-            applyU<<<dimGridBP, dimBlockBP>>>(d_Ud, d_Ul, d_Uu, 
-                 d_u, d_tmp, x_idx, Nx, Ny, num_sources); 
+            applyU<<<dimGridBP, dimBlockBP>>>(d_Ud, d_Ul, d_Uu,
+                 d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
             applyInvTpostU(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
         }
-    } 
+    }
 
     /* Must destroy cuBLAS handle before exiting */
     USCT_CUDA_CHECK(cudaDeviceSynchronize());
-    USCT_CUBLAS_CHECK(cublasDestroy(handle));
-    
+
     /* Wrap the result up as a MATLAB gpuArray for return. */
     plhs[0] = mxGPUCreateMxArrayOnGPU(u);
 
@@ -540,16 +536,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
      * The mxGPUArray pointers are host-side structures that refer to device
      * data. These must be destroyed before leaving the MEX function.
      */
-    mxGPUDestroyGPUArray(SRC);
-    mxGPUDestroyGPUArray(Ld);
-    mxGPUDestroyGPUArray(Ll);
-    mxGPUDestroyGPUArray(Lu);
-    mxGPUDestroyGPUArray(Ud);
-    mxGPUDestroyGPUArray(Ul);
-    mxGPUDestroyGPUArray(Uu);
-    mxGPUDestroyGPUArray(invT);
-    mxGPUDestroyGPUArray(u);
-    mxGPUDestroyGPUArray(tmp);
+
+    resources.close();
 }
 #else
 
@@ -625,34 +613,34 @@ inline void solveFactorBlock(cusolverDnHandle_t handle,
         rhs + 1, Ny, info));
 }
 
-void mexFunction(int nlhs, mxArray *plhs[],
-                 int nrhs, mxArray const *prhs[])
+void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
+    WustMexResources resources;
     mxInitGPU();
     if (nlhs != 1) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidOutput",
+        wustFail("WUST:InvalidOutput",
             "applyBlockLUFactors requires one output.");
     }
     if (nrhs != 10 || !mxIsLogicalScalar(prhs[9])) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidInput",
+        wustFail("WUST:InvalidInput",
             "Expected eight complex single gpuArrays, int32 pivots, and an adjoint logical.");
     }
     for (int input = 0; input < 9; ++input) {
         if (!mxIsGPUArray(prhs[input])) {
-            mexErrMsgIdAndTxt("usct:blocklu:InvalidInput",
+            wustFail("WUST:InvalidInput",
                 "Inputs one through nine must be gpuArray values.");
         }
     }
 
-    mxGPUArray const *SRC = mxGPUCreateFromMxArray(prhs[0]);
-    mxGPUArray const *Ld = mxGPUCreateFromMxArray(prhs[1]);
-    mxGPUArray const *Ll = mxGPUCreateFromMxArray(prhs[2]);
-    mxGPUArray const *Lu = mxGPUCreateFromMxArray(prhs[3]);
-    mxGPUArray const *Ud = mxGPUCreateFromMxArray(prhs[4]);
-    mxGPUArray const *Ul = mxGPUCreateFromMxArray(prhs[5]);
-    mxGPUArray const *Uu = mxGPUCreateFromMxArray(prhs[6]);
-    mxGPUArray const *luFactors = mxGPUCreateFromMxArray(prhs[7]);
-    mxGPUArray const *pivots = mxGPUCreateFromMxArray(prhs[8]);
+    mxGPUArray const *SRC = resources.input(prhs[0]);
+    mxGPUArray const *Ld = resources.input(prhs[1]);
+    mxGPUArray const *Ll = resources.input(prhs[2]);
+    mxGPUArray const *Lu = resources.input(prhs[3]);
+    mxGPUArray const *Ud = resources.input(prhs[4]);
+    mxGPUArray const *Ul = resources.input(prhs[5]);
+    mxGPUArray const *Uu = resources.input(prhs[6]);
+    mxGPUArray const *luFactors = resources.input(prhs[7]);
+    mxGPUArray const *pivots = resources.input(prhs[8]);
     bool adjoint = static_cast<bool>(*mxGetLogicals(prhs[9]));
 
     int Ny = static_cast<int>(mxGPUGetDimensions(SRC)[0]);
@@ -661,7 +649,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
         (static_cast<size_t>(Nx) * Ny));
     int interior = Ny - 2;
     if (Nx < 3 || Ny < 3 || numSources < 1) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidGrid",
+        wustFail("WUST:InvalidGrid",
             "Invalid grid or empty RHS batch.");
     }
     if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 ||
@@ -676,20 +664,20 @@ void mexFunction(int nlhs, mxArray *plhs[],
         mxGPUGetDimensions(luFactors)[2] != Nx ||
         mxGPUGetDimensions(pivots)[0] != interior ||
         mxGPUGetDimensions(pivots)[1] != Nx) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidDimensions",
+        wustFail("WUST:InvalidDimensions",
             "RHS, block arrays, LU factors, and pivots have inconsistent dimensions.");
     }
     mxGPUArray const *singleInputs[] = {SRC,Ld,Ll,Lu,Ud,Ul,Uu,luFactors};
     for (int input = 0; input < 8; ++input) {
         if (mxGPUGetClassID(singleInputs[input]) != mxSINGLE_CLASS ||
             mxGPUGetComplexity(singleInputs[input]) != mxCOMPLEX) {
-            mexErrMsgIdAndTxt("usct:blocklu:InvalidType",
+            wustFail("WUST:InvalidType",
                 "RHS, block arrays, and LU factors must be complex single gpuArrays.");
         }
     }
     if (mxGPUGetClassID(pivots) != mxINT32_CLASS ||
         mxGPUGetComplexity(pivots) != mxREAL) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidType",
+        wustFail("WUST:InvalidType",
             "Pivots must be a real int32 gpuArray.");
     }
 
@@ -703,16 +691,16 @@ void mexFunction(int nlhs, mxArray *plhs[],
     cuComplex const *d_factors = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(luFactors));
     int const *d_pivots = reinterpret_cast<int const *>(mxGPUGetDataReadOnly(pivots));
 
-    mxGPUArray *u = mxGPUCreateGPUArray(mxGPUGetNumberOfDimensions(SRC),
+    mxGPUArray *u = resources.array(mxGPUGetNumberOfDimensions(SRC),
         mxGPUGetDimensions(SRC), mxSINGLE_CLASS, mxCOMPLEX,
         MX_GPU_INITIALIZE_VALUES);
     cuComplex *d_u = reinterpret_cast<cuComplex *>(mxGPUGetData(u));
     mwSize tmpDims[2] = {static_cast<mwSize>(Ny), static_cast<mwSize>(numSources)};
-    mxGPUArray *tmp = mxGPUCreateGPUArray(2, tmpDims, mxSINGLE_CLASS,
+    mxGPUArray *tmp = resources.array(2, tmpDims, mxSINGLE_CLASS,
         mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
     cuComplex *d_tmp = reinterpret_cast<cuComplex *>(mxGPUGetData(tmp));
     mwSize infoElements = static_cast<mwSize>(Nx);
-    mxGPUArray *info = mxGPUCreateGPUArray(1, &infoElements,
+    mxGPUArray *info = resources.array(1, &infoElements,
         mxINT32_CLASS, mxREAL, MX_GPU_INITIALIZE_VALUES);
     int *d_info = reinterpret_cast<int *>(mxGPUGetData(info));
 
@@ -722,7 +710,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
     dim3 sourceBlock(256, 1, 1);
     dim3 sourceGrid((numSources + sourceBlock.x - 1) / sourceBlock.x, 1, 1);
     cusolverDnHandle_t handle;
-    USCT_CUSOLVER_CHECK(cusolverDnCreate(&handle));
+    USCT_CUSOLVER_CHECK(resources.create(&handle));
 
     if (adjoint) {
         for (int x = 1; x < Nx; ++x) {
@@ -775,15 +763,20 @@ void mexFunction(int nlhs, mxArray *plhs[],
         }
     }
     usctCheckDeviceInfo(d_info, Nx, "apply getrs");
-    USCT_CUSOLVER_CHECK(cusolverDnDestroy(handle));
+
     plhs[0] = mxGPUCreateMxArrayOnGPU(u);
 
     for (int input = 0; input < 8; ++input) {
-        mxGPUDestroyGPUArray(singleInputs[input]);
+
     }
-    mxGPUDestroyGPUArray(pivots);
-    mxGPUDestroyGPUArray(u);
-    mxGPUDestroyGPUArray(tmp);
-    mxGPUDestroyGPUArray(info);
+
+    resources.close();
 }
 #endif
+
+void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
+{
+    try { runMex(nlhs, plhs, nrhs, prhs); }
+    catch (const WustMexError& error) { mexErrMsgIdAndTxt(error.id.c_str(), "%s", error.what()); }
+    catch (const std::exception& error) { mexErrMsgIdAndTxt("WUST:RuntimeError", "%s", error.what()); }
+}

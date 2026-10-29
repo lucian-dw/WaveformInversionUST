@@ -43,15 +43,15 @@
 //------------------------------------------------- Initialization ---------------------------------------------------//
 //--------------------------------------------------------------------------------------------------------------------//
 
-cufftHandle CufftComplexMatrix::sR2CFftPlanND = cufftHandle();
-cufftHandle CufftComplexMatrix::sC2RFftPlanND = cufftHandle();
+CufftPlan CufftComplexMatrix::sR2CFftPlanND;
+CufftPlan CufftComplexMatrix::sC2RFftPlanND;
 
-cufftHandle CufftComplexMatrix::sR2CFftPlan1DX = cufftHandle();
-cufftHandle CufftComplexMatrix::sR2CFftPlan1DY = cufftHandle();
-cufftHandle CufftComplexMatrix::sR2CFftPlan1DZ = cufftHandle();
-cufftHandle CufftComplexMatrix::sC2RFftPlan1DX = cufftHandle();
-cufftHandle CufftComplexMatrix::sC2RFftPlan1DY = cufftHandle();
-cufftHandle CufftComplexMatrix::sC2RFftPlan1DZ = cufftHandle();
+CufftPlan CufftComplexMatrix::sR2CFftPlan1DX;
+CufftPlan CufftComplexMatrix::sR2CFftPlan1DY;
+CufftPlan CufftComplexMatrix::sR2CFftPlan1DZ;
+CufftPlan CufftComplexMatrix::sC2RFftPlan1DX;
+CufftPlan CufftComplexMatrix::sC2RFftPlan1DY;
+CufftPlan CufftComplexMatrix::sC2RFftPlan1DZ;
 
 
 /**
@@ -85,12 +85,13 @@ std::map<cufftResult, ErrorMessage> CufftComplexMatrix::sCufftErrorMessages
 /**
  * Create an cuFFT plan for 2D/3D Real-to-Complex transform.
  */
-void CufftComplexMatrix::createR2CFftPlanND(const DimensionSizes& inMatrixDims)
+void CufftComplexMatrix::createR2CFftPlanND(const SimulationLayout& layout)
 {
+  const DimensionSizes inMatrixDims = layout.field();
   cufftResult cufftError;
-  if (Parameters::getInstance().isSimulation3D())
+  if (layout.is3D())
   {
-    cufftError= cufftPlan3d(&sR2CFftPlanND,
+    cufftError= cufftPlan3d(sR2CFftPlanND.address(),
                             static_cast<int>(inMatrixDims.nz),
                             static_cast<int>(inMatrixDims.ny),
                             static_cast<int>(inMatrixDims.nx),
@@ -102,7 +103,7 @@ void CufftComplexMatrix::createR2CFftPlanND(const DimensionSizes& inMatrixDims)
     int n[rank] = {static_cast<int>(inMatrixDims.ny), static_cast<int>(inMatrixDims.nx)};
     const int inDistance = static_cast<int>(inMatrixDims.nx * inMatrixDims.ny);
     const int outDistance = static_cast<int>((inMatrixDims.nx / 2 + 1) * inMatrixDims.ny);
-    cufftError = cufftPlanMany(&sR2CFftPlanND, rank, n,
+    cufftError = cufftPlanMany(sR2CFftPlanND.address(), rank, n,
                                nullptr, 1, inDistance,
                                nullptr, 1, outDistance,
                                CUFFT_R2C, static_cast<int>(inMatrixDims.nz));
@@ -118,12 +119,13 @@ void CufftComplexMatrix::createR2CFftPlanND(const DimensionSizes& inMatrixDims)
 /**
  * Create cuFFT plan for 2D/3D Complex-to-Real transform.
  */
-void CufftComplexMatrix::createC2RFftPlanND(const DimensionSizes& outMatrixDims)
+void CufftComplexMatrix::createC2RFftPlanND(const SimulationLayout& layout)
 {
+  const DimensionSizes outMatrixDims = layout.field();
   cufftResult cufftError;
-  if (Parameters::getInstance().isSimulation3D())
+  if (layout.is3D())
   {
-    cufftError = cufftPlan3d(&sC2RFftPlanND,
+    cufftError = cufftPlan3d(sC2RFftPlanND.address(),
                              static_cast<int>(outMatrixDims.nz),
                              static_cast<int>(outMatrixDims.ny),
                              static_cast<int>(outMatrixDims.nx),
@@ -135,7 +137,7 @@ void CufftComplexMatrix::createC2RFftPlanND(const DimensionSizes& outMatrixDims)
     int n[rank] = {static_cast<int>(outMatrixDims.ny), static_cast<int>(outMatrixDims.nx)};
     const int inDistance = static_cast<int>((outMatrixDims.nx / 2 + 1) * outMatrixDims.ny);
     const int outDistance = static_cast<int>(outMatrixDims.nx * outMatrixDims.ny);
-    cufftError = cufftPlanMany(&sC2RFftPlanND, rank, n,
+    cufftError = cufftPlanMany(sC2RFftPlanND.address(), rank, n,
                                nullptr, 1, inDistance,
                                nullptr, 1, outDistance,
                                CUFFT_C2R, static_cast<int>(outMatrixDims.nz));
@@ -176,7 +178,7 @@ void CufftComplexMatrix::createR2CFftPlan1DX(const DimensionSizes& inMatrixDims)
   int batch = ny * nz;
 
   // Plan the FFT
-  cufftResult_t cufftError = cufftPlanMany(&sR2CFftPlan1DX, rank, n,
+  cufftResult_t cufftError = cufftPlanMany(sR2CFftPlan1DX.address(), rank, n,
                                            inembed, istride, idist,
                                            onembed, ostride, odist,
                                            CUFFT_R2C, batch);
@@ -215,7 +217,7 @@ void CufftComplexMatrix::createR2CFftPlan1DY(const DimensionSizes& inMatrixDims)
 
   int batch =  nx * nz;
 
-  cufftResult_t cufftError = cufftPlanMany(&sR2CFftPlan1DY, rank, n,
+  cufftResult_t cufftError = cufftPlanMany(sR2CFftPlan1DY.address(), rank, n,
                                            inembed, istride, idist,
                                            onembed, ostride, odist,
                                            CUFFT_R2C, batch);
@@ -259,7 +261,7 @@ void CufftComplexMatrix::createR2CFftPlan1DZ(const DimensionSizes& inMatrixDims)
 
     int batch =  nx * ny;
 
-    cufftResult_t cufftError = cufftPlanMany(&sR2CFftPlan1DZ, rank, n,
+    cufftResult_t cufftError = cufftPlanMany(sR2CFftPlan1DZ.address(), rank, n,
                                              inembed, istride, idist,
                                              onembed, ostride, odist,
                                              CUFFT_R2C, batch);
@@ -299,7 +301,7 @@ void CufftComplexMatrix::createC2RFftPlan1DX(const DimensionSizes& outMatrixDims
 
   int batch = ny * nz;
 
-  cufftResult_t cufftError = cufftPlanMany(&sC2RFftPlan1DX, rank, n,
+  cufftResult_t cufftError = cufftPlanMany(sC2RFftPlan1DX.address(), rank, n,
                                            inembed, istride, idist,
                                            onembed, ostride, odist,
                                            CUFFT_C2R, batch);
@@ -338,7 +340,7 @@ void CufftComplexMatrix::createC2RFftPlan1DY(const DimensionSizes& outMatrixDims
 
   int batch =  nx * nz;
 
-  cufftResult_t cufftError = cufftPlanMany(&sC2RFftPlan1DY, rank, n,
+  cufftResult_t cufftError = cufftPlanMany(sC2RFftPlan1DY.address(), rank, n,
                                            inembed, istride, idist,
                                            onembed, ostride, odist,
                                            CUFFT_C2R, batch);
@@ -383,7 +385,7 @@ void CufftComplexMatrix::createC2RFftPlan1DZ(const DimensionSizes& outMatrixDims
 
     int batch =  nx * ny;
 
-    cufftResult_t cufftError = cufftPlanMany(&sC2RFftPlan1DZ, rank, n,
+    cufftResult_t cufftError = cufftPlanMany(sC2RFftPlan1DZ.address(), rank, n,
                                              inembed, istride, idist,
                                              onembed, ostride, odist,
                                              CUFFT_C2R, batch);
@@ -401,66 +403,16 @@ void CufftComplexMatrix::createC2RFftPlan1DZ(const DimensionSizes& outMatrixDims
  */
 void CufftComplexMatrix::destroyAllPlansAndStaticData()
 {
-  cufftResult_t cufftError;
-
-  if (sR2CFftPlanND)
+  CufftPlan* plans[] = {&sR2CFftPlanND, &sC2RFftPlanND, &sR2CFftPlan1DX,
+                       &sR2CFftPlan1DY, &sR2CFftPlan1DZ, &sC2RFftPlan1DX,
+                       &sC2RFftPlan1DY, &sC2RFftPlan1DZ};
+  cufftResult firstError = CUFFT_SUCCESS;
+  for (auto* plan : plans)
   {
-    cufftError = cufftDestroy(sR2CFftPlanND);
-    sR2CFftPlanND = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyR2CFftPlanND);
+    const cufftResult status = plan->close();
+    if (firstError == CUFFT_SUCCESS) firstError = status;
   }
-
-  if (sC2RFftPlanND)
-  {
-    cufftError = cufftDestroy(sC2RFftPlanND);
-    sC2RFftPlanND = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyC2RFftPlanND);
-  }
-
-  if (sR2CFftPlan1DX)
-  {
-    cufftError = cufftDestroy(sR2CFftPlan1DX);
-    sR2CFftPlan1DX = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyR2CFftPlan1DX);
-  }
-
-  if (sR2CFftPlan1DY)
-  {
-    cufftError = cufftDestroy(sR2CFftPlan1DY);
-    sR2CFftPlan1DY = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyR2CFftPlan1DY);
-  }
-
-  if (sR2CFftPlan1DZ)
-  {
-    cufftError = cufftDestroy(sR2CFftPlan1DZ);
-    sR2CFftPlan1DZ = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyR2CFftPlan1DZ);
-  }
-
-  if (sC2RFftPlan1DX)
-  {
-    cufftError = cufftDestroy(sC2RFftPlan1DX);
-    sC2RFftPlan1DX = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyC2RFftPlan1DX);
-  }
-
-  if (sC2RFftPlan1DY)
-  {
-    cufftError = cufftDestroy(sC2RFftPlan1DY);
-    sC2RFftPlan1DY = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyC2RFftPlan1DY);
-  }
-
-  if (sC2RFftPlan1DZ)
-  {
-    cufftError = cufftDestroy(sC2RFftPlan1DZ);
-    sC2RFftPlan1DZ = cufftHandle();
-    if (cufftError != CUFFT_SUCCESS) throwCufftException(cufftError, kErrFmtDestroyC2RFftPlan1DZ);
-  }
-
-  // clear static data
-  sCufftErrorMessages.clear();
+  if (firstError != CUFFT_SUCCESS) throwCufftException(firstError, kErrFmtDestroyR2CFftPlanND);
 }// end of destroyAllPlansAndStaticData
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -470,7 +422,7 @@ void CufftComplexMatrix::destroyAllPlansAndStaticData()
 void CufftComplexMatrix::computeR2CFftND(RealMatrix& inMatrix)
 {
   // Compute forward cuFFT (if the plan does not exist, it also returns error)
-  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlanND,
+  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlanND.get(),
                                           static_cast<cufftReal*>(inMatrix.getDeviceData()),
                                           reinterpret_cast<cufftComplex*>(mDeviceData));
 
@@ -487,7 +439,7 @@ void CufftComplexMatrix::computeR2CFftND(RealMatrix& inMatrix)
 void CufftComplexMatrix::computeC2RFftND(RealMatrix& outMatrix)
 {
   // Compute forward cuFFT (if the plan does not exist, it also returns error)
-  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlanND,
+  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlanND.get(),
                                           reinterpret_cast<cufftComplex*>(mDeviceData),
                                           static_cast<cufftReal*>(outMatrix.getDeviceData()));
 
@@ -504,7 +456,7 @@ void CufftComplexMatrix::computeC2RFftND(RealMatrix& outMatrix)
 void CufftComplexMatrix::computeR2CFft1DX(RealMatrix& inMatrix)
 {
   // Compute forward cuFFT (if the plan does not exist, it also returns error)
-  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DX,
+  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DX.get(),
                                           static_cast<cufftReal*>(inMatrix.getDeviceData()),
                                           reinterpret_cast<cufftComplex*>(mDeviceData));
 
@@ -536,7 +488,7 @@ void CufftComplexMatrix::computeR2CFft1DY(RealMatrix& inMatrix)
   // Compute forward cuFFT (if the plan does not exist, it also returns error).
   // The FFT is calculated in-place (may be a bit slower than out-of-place, however
   // it does not request additional transfers and memory).
-  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DY,
+  cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DY.get(),
                                           static_cast<cufftReal*>(mDeviceData),
                                           reinterpret_cast<cufftComplex*>(mDeviceData));
 
@@ -568,7 +520,7 @@ void CufftComplexMatrix::computeR2CFft1DZ(RealMatrix& inMatrix)
     // Compute forward cuFFT (if the plan does not exist, it also returns error).
     // The FFT is calculated in-place (may be a bit slower than out-of-place, however
     // it does not request additional transfers and memory).
-    cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DZ,
+    cufftResult_t cufftError = cufftExecR2C(sR2CFftPlan1DZ.get(),
                                             static_cast<cufftReal*>(mDeviceData),
                                             reinterpret_cast<cufftComplex*>(mDeviceData));
 
@@ -590,7 +542,7 @@ void CufftComplexMatrix::computeR2CFft1DZ(RealMatrix& inMatrix)
 void CufftComplexMatrix::computeC2RFft1DX(RealMatrix& outMatrix)
 {
   // Compute inverse cuFFT (if the plan does not exist, it also returns error)
-  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DX,
+  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DX.get(),
                                           reinterpret_cast<cufftComplex*>(mDeviceData),
                                           static_cast<cufftReal*>(outMatrix.getDeviceData()));
 
@@ -612,7 +564,7 @@ void CufftComplexMatrix::computeC2RFft1DY(RealMatrix& outMatrix)
   // Compute forward cuFFT (if the plan does not exist, it also returns error).
   // The FFT is calculated in-place (may be a bit slower than out-of-place, however
   // it does not request additional transfers and memory).
-  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DY,
+  cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DY.get(),
                                           reinterpret_cast<cufftComplex*>(mDeviceData),
                                           static_cast<cufftReal*>(mDeviceData));
 
@@ -644,7 +596,7 @@ void CufftComplexMatrix::computeC2RFft1DZ(RealMatrix& outMatrix)
     // Compute forward cuFFT (if the plan does not exist, it also returns error).
     // The FFT is calculated in-place (may be a bit slower than out-of-place, however
     // it does not request additional transfers and memory).
-    cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DZ,
+    cufftResult_t cufftError = cufftExecC2R(sC2RFftPlan1DZ.get(),
                                             reinterpret_cast<cufftComplex*>(mDeviceData),
                                             static_cast<cufftReal*>(mDeviceData));
 

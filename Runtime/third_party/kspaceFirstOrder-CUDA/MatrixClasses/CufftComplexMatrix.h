@@ -34,6 +34,8 @@
 
 #include <map>
 #include <cufft.h>
+#include <Utils/SimulationLayout.h>
+#include <Utils/CufftPlan.h>
 
 #include <MatrixClasses/ComplexMatrix.h>
 #include <Logger/ErrorMessages.h>
@@ -70,13 +72,13 @@ class CufftComplexMatrix : public ComplexMatrix
      * @param [in] inMatrixDims  - The dimension sizes of the input matrix.
      * @throw std::runtime_error - If the plan can't be created.
      */
-    static void createR2CFftPlanND(const DimensionSizes& inMatrixDims);
+    static void createR2CFftPlanND(const SimulationLayout& layout);
     /**
      * @brief Create cuFFT plan for 2D/3D Complex-to-Real transform.
      * @param [in] outMatrixDims  - the dimension sizes of the output matrix.
      * @throw std::runtime_error  - If the plan can't be created.
      */
-    static void createC2RFftPlanND(const DimensionSizes& outMatrixDims);
+    static void createC2RFftPlanND(const SimulationLayout& layout);
 
     /**
      * @brief   Create cuFFT plan for 1DX Real-to-Complex transform.
@@ -238,23 +240,23 @@ class CufftComplexMatrix : public ComplexMatrix
 
   protected:
     /// cufft plan for the ND Real-to-Complex transform.
-    static cufftHandle sR2CFftPlanND;
+    static CufftPlan sR2CFftPlanND;
     /// cufft plan for the ND Complex-to-Real transform.
-    static cufftHandle sC2RFftPlanND;
+    static CufftPlan sC2RFftPlanND;
 
     /// cufft plan for the 1D Real-to-Complex transform in the x dimension.
-    static cufftHandle sR2CFftPlan1DX;
+    static CufftPlan sR2CFftPlan1DX;
     /// cufft plan for the 1D Real-to-Complex transform in the y dimension.
-    static cufftHandle sR2CFftPlan1DY;
+    static CufftPlan sR2CFftPlan1DY;
     /// cufft plan for the 1D Real-to-Complex transform in the z dimension.
-    static cufftHandle sR2CFftPlan1DZ;
+    static CufftPlan sR2CFftPlan1DZ;
 
     /// cufft plan for the 1D Complex-to-Real transform in the x dimension.
-    static cufftHandle sC2RFftPlan1DX;
+    static CufftPlan sC2RFftPlan1DX;
     /// cufft plan for the 1D Complex-to-Real transform in the y dimension.
-    static cufftHandle sC2RFftPlan1DY;
+    static CufftPlan sC2RFftPlan1DY;
     /// cufft plan for the 1D Complex-to-Real transform in the z dimension.
-    static cufftHandle sC2RFftPlan1DZ;
+    static CufftPlan sC2RFftPlan1DZ;
 
   private:
     /**

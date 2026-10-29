@@ -217,10 +217,7 @@ void OutputStreamContainer::createStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->create();
-    }
+    it.second->create();
   }
 }// end of createStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -232,10 +229,7 @@ void OutputStreamContainer::reopenStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->reopen();
-    }
+    it.second->reopen();
   }
 }// end of reopenStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -247,10 +241,7 @@ void OutputStreamContainer::sampleStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->sample();
-    }
+    it.second->sample();
   }
 }// end of sampleStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -262,10 +253,7 @@ void OutputStreamContainer::flushRawStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->flushRaw();
-    }
+    it.second->flushRaw();
   }
 }// end of flushRawStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -277,10 +265,7 @@ void OutputStreamContainer::checkpointStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->checkpoint();
-    }
+    it.second->checkpoint();
   }
 }// end of checkpointStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -292,10 +277,7 @@ void OutputStreamContainer::postProcessStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->postProcess();
-    }
+    it.second->postProcess();
   }
 }// end of postProcessStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -307,10 +289,7 @@ void OutputStreamContainer::closeStreams()
 {
   for (const auto& it : mContainer)
   {
-    if (it.second)
-    {
-      it.second->close();
-    }
+    it.second->close();
   }
 }// end of closeStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -320,14 +299,6 @@ void OutputStreamContainer::closeStreams()
  */
 void OutputStreamContainer::freeStreams()
 {
-  for (auto& it : mContainer)
-  {
-    if (it.second)
-    {
-      delete it.second;
-      it.second = nullptr;
-    }
-  }
   mContainer.clear();
 }// end of freeStreams
 //----------------------------------------------------------------------------------------------------------------------
@@ -353,19 +324,19 @@ void OutputStreamContainer::addOutputStream(const OutputStreamIdx               
   {
     if (params.getSensorMaskType() == Parameters::SensorMaskType::kIndex)
     {
-      mContainer[streamIdx] = new IndexOutputStream(params.getOutputFile(),
+      mContainer[streamIdx].reset(new IndexOutputStream(params.getOutputFile(),
                                                     sOutputStreamHdf5Names[streamIdx],
                                                     matrixContainer.getMatrix<RealMatrix>(sampledMatrixIdx),
                                                     matrixContainer.getMatrix<IndexMatrix>(MI::kSensorMaskIndex),
-                                                    reduceOp);
+                                                    reduceOp));
     }
     else
     {
-      mContainer[streamIdx] = new CuboidOutputStream(params.getOutputFile(),
+      mContainer[streamIdx].reset(new CuboidOutputStream(params.getOutputFile(),
                                                      sOutputStreamHdf5Names[streamIdx],
                                                      matrixContainer.getMatrix<RealMatrix>(sampledMatrixIdx),
                                                      matrixContainer.getMatrix<IndexMatrix>(MI::kSensorMaskCorners),
-                                                     reduceOp);
+                                                     reduceOp));
     }
   }
 }// end of addOutputStream
@@ -384,10 +355,10 @@ void OutputStreamContainer::addWholeDomainOutputStream(const OutputStreamIdx    
 
   if (present)
   {
-    mContainer[streamIdx] = new WholeDomainOutputStream(params.getOutputFile(),
+    mContainer[streamIdx].reset(new WholeDomainOutputStream(params.getOutputFile(),
                                                         sOutputStreamHdf5Names[streamIdx],
                                                         matrixContainer.getMatrix<RealMatrix>(sampledMatrixIdx),
-                                                        reduceOp);
+                                                        reduceOp));
   }
 }// end of addWholeDomainOutputStream
 //----------------------------------------------------------------------------------------------------------------------

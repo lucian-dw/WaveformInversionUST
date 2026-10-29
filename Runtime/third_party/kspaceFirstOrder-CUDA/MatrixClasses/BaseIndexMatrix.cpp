@@ -92,28 +92,14 @@ void BaseIndexMatrix::copyFromDevice()
 /**
  * Memory allocation based on the capacity. \n
  *
- * CPU memory is aligned at kDataAlignment, registered as pinned CUDA memory and zeroed.
+ * CPU memory is aligned and registered; readData fills the complete index buffer.
  * The GPU memory is allocated on GPU but not zeroed (no reason).
  */
 void BaseIndexMatrix::allocateMemory()
 {
-  // Size of memory to allocate
-  size_t sizeInBytes = mCapacity * sizeof(size_t);
-
-  mHostData = static_cast<size_t*>(_mm_malloc(sizeInBytes, kDataAlignment));
-
-  if (!mHostData)
-  {
-    throw std::bad_alloc();
-  }
-
-  // Register Host memory (pin in memory)
-  cudaCheckErrors(cudaHostRegister(mHostData, sizeInBytes, cudaHostRegisterPortable));
-
-  if ((cudaMalloc<size_t>(&mDeviceData, sizeInBytes) != cudaSuccess) || (!mDeviceData))
-  {
-    throw std::bad_alloc();
-  }
+  mBuffer.allocate(mCapacity, kDataAlignment);
+  mHostData = mBuffer.host();
+  mDeviceData = mBuffer.device();
 }// end of allocateMemory
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -122,18 +108,8 @@ void BaseIndexMatrix::allocateMemory()
  */
 void BaseIndexMatrix::freeMemory()
 {
-  if (mHostData)
-  {
-    cudaHostUnregister(mHostData);
-    _mm_free(mHostData);
-  }
+  mBuffer.reset();
   mHostData = nullptr;
-
-  // Free GPU memory
-  if (mDeviceData)
-  {
-    cudaCheckErrors(cudaFree(mDeviceData));
-  }
   mDeviceData = nullptr;
 }// end of freeMemory
 //----------------------------------------------------------------------------------------------------------------------

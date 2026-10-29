@@ -141,7 +141,7 @@ class OutputStreamContainer
      */
     BaseOutputStream& operator[](const OutputStreamIdx outputStreamIdx)
     {
-      return (*(mContainer[outputStreamIdx]));
+      return (*(mContainer.at(outputStreamIdx)));
     };
 
     /**
@@ -217,7 +217,7 @@ class OutputStreamContainer
     /// Container holding the names of all possible streams present in the output file.
     static std::map<OutputStreamIdx, MatrixName> sOutputStreamHdf5Names;
     /// Map with output streams.
-    std::map<OutputStreamIdx, BaseOutputStream*> mContainer;
+    std::map<OutputStreamIdx, std::unique_ptr<BaseOutputStream>> mContainer;
 }; // end of OutputStreamContainer
 //----------------------------------------------------------------------------------------------------------------------
 

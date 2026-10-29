@@ -31,6 +31,7 @@
 
 #ifndef PARAMETERS_H
 #define PARAMETERS_H
+#include <Utils/SimulationLayout.h>
 
 #include <string>
 
@@ -382,6 +383,7 @@ class Parameters
      * @return Dimension sizes of 3D real matrices.
      */
     DimensionSizes getFullDimensionSizes()     const { return mFullDimensionSizes;  };
+    const SimulationLayout& getLayout() const { return mLayout; }
     /**
      * @brief  Get reduced dimension sizes of the simulation (complex classes).
      * @return Dimension sizes of reduced complex 3D matrices.
@@ -852,10 +854,6 @@ class Parameters
     /// Container holding all the names of all possible parameters present in the HDF5 files.
     static std::map<ParameterNameIdx, MatrixName> sParameterHdf5Names;
 
-    /// Singleton flag.
-    static bool           sParametersInstanceFlag;
-    /// Singleton instance.
-    static Parameters*    sPrametersInstance;
 
     /// Class with CUDA Parameters (runtime setup).
     CudaParameters        mCudaParameters;
@@ -874,6 +872,7 @@ class Parameters
 
     /// Full 3D dimension sizes.
     DimensionSizes mFullDimensionSizes;
+    SimulationLayout mLayout;
     /// Reduced 3D dimension sizes.
     DimensionSizes mReducedDimensionSizes;
 

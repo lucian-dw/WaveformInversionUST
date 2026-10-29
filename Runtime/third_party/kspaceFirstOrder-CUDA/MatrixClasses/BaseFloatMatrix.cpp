@@ -121,24 +121,9 @@ void BaseFloatMatrix::copyFromDevice()
  */
 void BaseFloatMatrix::allocateMemory()
 {
-  // Size of memory to allocate
-  size_t sizeInBytes = mCapacity * sizeof(float);
-
-  // Allocate CPU memory
-  mHostData = static_cast<float*>(_mm_malloc(sizeInBytes, kDataAlignment));
-  if (!mHostData)
-  {
-    throw std::bad_alloc();
-  }
-
-  // Register Host memory (pin in memory)
-  cudaCheckErrors(cudaHostRegister(mHostData, sizeInBytes, cudaHostRegisterPortable));
-
-  // Allocate memory on the GPU
-  if ((cudaMalloc<float>(&mDeviceData, sizeInBytes) != cudaSuccess) || (!mDeviceData))
-  {
-    throw std::bad_alloc();
-  }
+  mBuffer.allocate(mCapacity, kDataAlignment);
+  mHostData = mBuffer.host();
+  mDeviceData = mBuffer.device();
   // This has to be done for simulations based on input sources
   zeroMatrix();
 }// end of allocateMemory
@@ -149,19 +134,8 @@ void BaseFloatMatrix::allocateMemory()
  */
 void BaseFloatMatrix::freeMemory()
 {
-  // Free CPU memory
-  if (mHostData)
-  {
-    cudaHostUnregister(mHostData);
-    _mm_free(mHostData);
-  }
+  mBuffer.reset();
   mHostData = nullptr;
-
-  // Free GPU memory
-  if (mDeviceData)
-  {
-    cudaCheckErrors(cudaFree(mDeviceData));
-  }
   mDeviceData = nullptr;
 }// end of freeMemory
 //----------------------------------------------------------------------------------------------------------------------

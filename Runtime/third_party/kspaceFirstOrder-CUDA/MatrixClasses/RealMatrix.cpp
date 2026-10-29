@@ -53,7 +53,6 @@ RealMatrix::RealMatrix(const DimensionSizes& dimensionSizes)
  */
 RealMatrix::~RealMatrix()
 {
-  freeMemory();
 }// end of ~RealMatrix
 //----------------------------------------------------------------------------------------------------------------------
 

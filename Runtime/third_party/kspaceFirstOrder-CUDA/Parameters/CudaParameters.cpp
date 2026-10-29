@@ -250,9 +250,7 @@ void CudaParameters::setUpDeviceConstants() const
   // Set values for constant memory
   constantsToTransfer.simulationDimension = params.getSimulationDimension();
 
-  const char* nativeBatchEnv = std::getenv("KWAVE_NATIVE_SOURCE_BATCH");
-  const unsigned int nativeBatchSize = nativeBatchEnv
-      ? static_cast<unsigned int>(params.getPressureSourceIndexSize()) : 1u;
+  const unsigned int nativeBatchSize = static_cast<unsigned int>(params.getLayout().batchCount);
 
   constantsToTransfer.nx  = static_cast<unsigned int>(fullDimSizes.nx);
   constantsToTransfer.ny  = static_cast<unsigned int>(fullDimSizes.ny);

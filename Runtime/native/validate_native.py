@@ -80,7 +80,7 @@ def main():
         serial.append(pressure(op, sensors.size))
     ip = a.output_dir / "native.h5"
     op = a.output_dir / "native_out.h5"
-    expand_input(a.input, ip, a.batch_size)
+    expand_input(a.input, ip, a.batch_size, source_indices=sources)
     env["KWAVE_NATIVE_SOURCE_BATCH"] = "1"
     t = time.perf_counter()
     subprocess.run(

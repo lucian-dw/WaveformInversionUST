@@ -31,6 +31,7 @@
 
 #ifndef BASE_FLOAT_MATRIX_H
 #define BASE_FLOAT_MATRIX_H
+#include <Utils/CudaBuffer.h>
 
 #include <MatrixClasses/BaseMatrix.h>
 #include <Utils/DimensionSizes.h>
@@ -127,6 +128,7 @@ class BaseFloatMatrix : public BaseMatrix
     size_t mCapacity;
 
     /// Raw CPU matrix data.
+    CudaBuffer<float> mBuffer;
     float* mHostData;
     /// Raw GPU matrix data.
     float* mDeviceData;

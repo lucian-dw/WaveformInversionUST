@@ -200,14 +200,15 @@ class MatrixContainer
       /// Temporary matrix for 1D fft in z.
       kTempCufftZ,
       /// Temporary matrix for cufft shift.
-      kTempCufftShift
+      kTempCufftShift,
+      kCount
     };// end of MatrixIdx
 
     /**
      * @brief  Get the number of identifiers in MatrixIdx enum class.
      * @return Number of records in MatrixIdx.
      */
-    static constexpr size_t getMatrixIdxCount() { return size_t(MatrixIdx::kTempCufftShift) + 1; }
+    static constexpr size_t getMatrixIdxCount() { return size_t(MatrixIdx::kCount); }
 
     /// Constructor.
     MatrixContainer();
@@ -228,7 +229,7 @@ class MatrixContainer
      */
     inline MatrixRecord& operator[](const MatrixIdx matrixIdx)
     {
-      return mContainer[matrixIdx];
+      return mContainer.at(matrixIdx);
     };
 
     /**
@@ -242,7 +243,7 @@ class MatrixContainer
     template<typename T>
     inline T& getMatrix(const MatrixIdx matrixIdx)
     {
-      return static_cast<T&>(*(mContainer[matrixIdx].matrixPtr));
+      return static_cast<T&>(*(mContainer.at(matrixIdx).matrixPtr));
     }
     /**
      * @brief   Get the matrix with a specific type from the const container. The matrix is mutable.
@@ -255,7 +256,7 @@ class MatrixContainer
     template<typename T>
     inline T& getMatrix(const MatrixIdx matrixIdx) const
     {
-      return static_cast<T&>(*(mContainer[matrixIdx].matrixPtr));
+      return static_cast<T&>(*(mContainer.at(matrixIdx).matrixPtr));
     }
 
     /// Populate the container with matrices based on the simulation type.

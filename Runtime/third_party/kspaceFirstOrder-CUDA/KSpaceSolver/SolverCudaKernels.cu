@@ -1923,7 +1923,7 @@ __global__ void cudaComputeSourceGradient(cuFloatComplex* sourceSpectrum,
 {
   for (auto i = getIndex(); i < cudaDeviceConstants.nElementsComplex; i += getStride())
   {
-    sourceSpectrum[i] *= sourceKappa[i] * cudaDeviceConstants.fftDivider;
+    sourceSpectrum[i] *= sourceKappa[getSharedComplexIndex(i)] * cudaDeviceConstants.fftDivider;
   }
 }// end of cudaComputeSourceGradient
 //----------------------------------------------------------------------------------------------------------------------

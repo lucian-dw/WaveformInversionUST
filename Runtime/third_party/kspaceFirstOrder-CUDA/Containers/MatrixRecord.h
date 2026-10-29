@@ -33,6 +33,7 @@
 #define MATRIX_RECORD_H
 
 #include <MatrixClasses/BaseMatrix.h>
+#include <memory>
 
 /**
  * @struct MatrixRecord
@@ -87,15 +88,15 @@ struct MatrixRecord
       matrixName(matrixName)
   {};
 
-  /// Copy constructor.
-  MatrixRecord(const MatrixRecord&) = default;
-  /// operator =
-  MatrixRecord& operator=(const MatrixRecord&) = default;
+  MatrixRecord(const MatrixRecord&) = delete;
+  MatrixRecord& operator=(const MatrixRecord&) = delete;
+  MatrixRecord(MatrixRecord&&) = default;
+  MatrixRecord& operator=(MatrixRecord&&) = default;
   // Destructor.
   ~MatrixRecord() = default;
 
   /// Pointer to the matrix object.
-  BaseMatrix*    matrixPtr;
+  std::unique_ptr<BaseMatrix> matrixPtr;
   /// Matrix data type.
   MatrixType     matrixType;
   /// Matrix dimension sizes.

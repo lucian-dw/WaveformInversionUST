@@ -1,27 +1,27 @@
 /*
  * This MEX file uses the mxGPUArray API with CUDA and CUSOLVER to perform
  * the block LU decomposition of the 9-point Helmholtz equation.
- * 
+ *
  * This was initially implemented in MATLAB using the following code:
- * 
+ *
  * % Calculate the Schur Complements and Their Inverses
  * invT = complex(zeros(Ny, Ny, Nx, 'single', 'gpuArray'));
- * D = diag(Dd(:,1)) + diag(Dl(:,1),-1) + diag(Du(:,1),1); T = D; 
+ * D = diag(Dd(:,1)) + diag(Dl(:,1),-1) + diag(Du(:,1),1); T = D;
  * invTcurr = complex(zeros(Ny, 'single', 'gpuArray'));
  * for j = 2:Nx
  *     % Invert T over only the interior points
  *     invTcurr(2:end-1,2:end-1) = inv(T(2:end-1,2:end-1));
  *     invT(:,:,j-1) = invTcurr;
- *     D = diag(Dd(:,j)) + diag(Dl(:,j),-1) + diag(Du(:,j),1); 
+ *     D = diag(Dd(:,j)) + diag(Dl(:,j),-1) + diag(Du(:,j),1);
  *     T = D - triDiagMultLeftGPUmex(Ld(:,j-1), Ll(:,j-1), Lu(:,j-1), ...
  *         triDiagMultRight(invT(:,:,j-1), Ud(:,j-1).', Ul(:,j-1).', Uu(:,j-1).'));
  * end
  * invT(:,:,Nx) = invInterior(T);
  * clearvars T D invTcurr; % Remove last T and invTcurr from memory
  *
- * See the separate triDiagMultRight.m and triDiagMultLeftGPUmex.cu file 
- * for additional details regarding the algorithm above. Although neither 
- * triDiagMultRight.m nor triDiagMultLeftGPUmex.cu are used in 
+ * See the separate triDiagMultRight.m and triDiagMultLeftGPUmex.cu file
+ * for additional details regarding the algorithm above. Although neither
+ * triDiagMultRight.m nor triDiagMultLeftGPUmex.cu are used in
  * this MEX file, key components of those algorithms were used here.
  */
 
@@ -34,36 +34,6 @@
 #include <vector>
 #include "cusolverDn.h" // To compile: mexcuda -lcusolver decompBlockLU.cu
 #include "block_lu_mex_utils.h"
-
-/* Helpful Operator Overloading -- Using cuComplex.h */
-inline __host__ __device__ cuFloatComplex operator*(cuFloatComplex a, cuFloatComplex b) {
-    return cuCmulf(a,b);
-}
-inline __host__ __device__ void operator*=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a * b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator/(cuFloatComplex a, cuFloatComplex b) {
-    return cuCdivf(a,b);
-}
-inline __host__ __device__ void operator/=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a / b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator+(cuFloatComplex a, cuFloatComplex b) {
-    return cuCaddf(a,b);
-}
-inline __host__ __device__ void operator+=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a + b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator-(cuFloatComplex a, cuFloatComplex b) {
-    return cuCsubf(a,b);
-}
-inline __host__ __device__ void operator-=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a - b;
-    a.x = c.x; a.y = c.y;
-}
 
 /* Choose a reasonably sized number of threads for the block. */
 #ifdef USCT_BLOCK_SIZE_32
@@ -97,7 +67,6 @@ void __global__ triDiagMat(cuComplex const * const Ad,
     }
 }
 
-
 /* Device code - Copy Interior of Matrix */
 void __global__ copyInterior(cuComplex const * const A,
                              cuComplex * const B, int const N)
@@ -107,10 +76,10 @@ void __global__ copyInterior(cuComplex const * const A,
 	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (row_idx < N && col_idx < N) {
         // Border
-        if ( (row_idx == 0) || (row_idx == N-1) || 
+        if ( (row_idx == 0) || (row_idx == N-1) ||
              (col_idx == 0) || (col_idx == N-1) ) {
             B[row_idx + N*col_idx] = make_cuFloatComplex(0,0);
-        } 
+        }
         // Interior
         else {
             B[row_idx + N*col_idx] = A[row_idx + N*col_idx];
@@ -128,7 +97,7 @@ void __global__ initializeIdentity(cuComplex * const A, int const N)
         // Border
         if ( (row_idx != 0) && (row_idx != N-1) && (row_idx == col_idx) ) {
             A[row_idx + N*col_idx] = make_cuFloatComplex(1,0);
-        } 
+        }
         // Interior
         else {
             A[row_idx + N*col_idx] = make_cuFloatComplex(0,0);
@@ -156,7 +125,7 @@ void __global__ triDiagMultLeftPlusD(cuComplex const * const A,
         // Regular Entries
         sA[threadIdx.y][threadIdx.x+1] = A[row_idx +size*col_idx];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.x == 0) && (row_idx != 0) ) 
+        if ( (threadIdx.x == 0) && (row_idx != 0) )
             sA[threadIdx.y][threadIdx.x] = A[row_idx-1 + size*col_idx];
         else if ( (threadIdx.x == blockDim.x-1) && (row_idx != size-1) )
             sA[threadIdx.y][threadIdx.x+2] = A[row_idx+1 + size*col_idx];
@@ -170,22 +139,22 @@ void __global__ triDiagMultLeftPlusD(cuComplex const * const A,
                 D = Dl[col_idx];
             } else if (row_idx == col_idx-1) {
                 D = Du[row_idx];
-            } 
+            }
         }
         // Actual Tridiagonal Matrix Multiply
         if (row_idx == 0) {
-            C[row_idx + size*col_idx] = D - 
+            C[row_idx + size*col_idx] = D -
                 (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
                 Bu[row_idx]*sA[threadIdx.y][threadIdx.x+2]);
         } else if (row_idx == size-1) {
-            C[row_idx + size*col_idx] = D - 
+            C[row_idx + size*col_idx] = D -
                 (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
                 Bl[row_idx-1]*sA[threadIdx.y][threadIdx.x]);
         } else {
-            C[row_idx + size*col_idx] = D - 
-                (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] + 
+            C[row_idx + size*col_idx] = D -
+                (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
                 Bl[row_idx-1]*sA[threadIdx.y][threadIdx.x] +
-                Bu[row_idx]*sA[threadIdx.y][threadIdx.x+2]); 
+                Bu[row_idx]*sA[threadIdx.y][threadIdx.x+2]);
         }
     }
 }
@@ -208,25 +177,25 @@ void __global__ triDiagMultRight(cuComplex const * const A,
         // Regular Entries
         sA[threadIdx.x][threadIdx.y+1] = A[row_idx + numRows*col_idx];
         // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (col_idx != 0) ) 
+        if ( (threadIdx.y == 0) && (col_idx != 0) )
             sA[threadIdx.x][threadIdx.y] = A[row_idx + numRows*(col_idx-1)];
         else if ( (threadIdx.y == blockDim.y-1) && (col_idx != numCols-1) )
             sA[threadIdx.x][threadIdx.y+2] = A[row_idx + numRows*(col_idx+1)];
         __syncthreads();
         // Actual Tridiagonal Matrix Multiply
         if (col_idx == 0) {
-            C[row_idx + numRows*col_idx] = 
+            C[row_idx + numRows*col_idx] =
                 Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
                 Bl[col_idx]*sA[threadIdx.x][threadIdx.y+2];
         } else if (col_idx == numCols-1) {
-            C[row_idx + numRows*col_idx] = 
+            C[row_idx + numRows*col_idx] =
                 Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
                 Bu[col_idx-1]*sA[threadIdx.x][threadIdx.y];
         } else {
-            C[row_idx + numRows*col_idx] = 
-                Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] + 
+            C[row_idx + numRows*col_idx] =
+                Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
                 Bu[col_idx-1]*sA[threadIdx.x][threadIdx.y] +
-                Bl[col_idx]*sA[threadIdx.x][threadIdx.y+2]; 
+                Bl[col_idx]*sA[threadIdx.x][threadIdx.y+2];
         }
     }
 }
@@ -390,15 +359,13 @@ void __global__ initializePivotedIdentity32(cuComplex * const matrix,
 #endif
 #endif
 
-
-
 /*
  * Host code
  */
 #ifndef USCT_FACTORS_BACKEND
-void mexFunction(int nlhs, mxArray *plhs[],
-                 int nrhs, mxArray const *prhs[])
+void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
+    WustMexResources resources;
     /* Declare all variables.*/
     mxGPUArray const *Ld;
     mxGPUArray const *Ll;
@@ -428,46 +395,59 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Throw an error if the input is not a GPU array. */
     if (nlhs < 1 || nlhs > 2) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidOutput", 
+        wustFail("WUST:InvalidOutput",
                           "decompBlockLU requires invT and optionally a timing struct.");
     }
     bool const collectTimings = (nlhs == 2);
-    if ( (nrhs!=9) || 
-        !(mxIsGPUArray(prhs[0])) || 
-        !(mxIsGPUArray(prhs[1])) || 
-        !(mxIsGPUArray(prhs[2])) || 
-        !(mxIsGPUArray(prhs[3])) || 
-        !(mxIsGPUArray(prhs[4])) || 
-        !(mxIsGPUArray(prhs[5])) || 
-        !(mxIsGPUArray(prhs[6])) || 
-        !(mxIsGPUArray(prhs[7])) || 
+    if ( (nrhs!=9) ||
+        !(mxIsGPUArray(prhs[0])) ||
+        !(mxIsGPUArray(prhs[1])) ||
+        !(mxIsGPUArray(prhs[2])) ||
+        !(mxIsGPUArray(prhs[3])) ||
+        !(mxIsGPUArray(prhs[4])) ||
+        !(mxIsGPUArray(prhs[5])) ||
+        !(mxIsGPUArray(prhs[6])) ||
+        !(mxIsGPUArray(prhs[7])) ||
         !(mxIsGPUArray(prhs[8])) ) {
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
+        wustFail("WUST:InvalidInput",
                           "Invalid input to triDiagMultLeftGPUmex: Expecting 9 gpuArray inputs");
     }
 
     /* Assemble GPU Arrays from Inputs */
-    Ld = mxGPUCreateFromMxArray(prhs[0]);
-    Ll = mxGPUCreateFromMxArray(prhs[1]);
-    Lu = mxGPUCreateFromMxArray(prhs[2]);
-    Dd = mxGPUCreateFromMxArray(prhs[3]);
-    Dl = mxGPUCreateFromMxArray(prhs[4]);
-    Du = mxGPUCreateFromMxArray(prhs[5]);
-    Ud = mxGPUCreateFromMxArray(prhs[6]);
-    Ul = mxGPUCreateFromMxArray(prhs[7]);
-    Uu = mxGPUCreateFromMxArray(prhs[8]);
+    Ld = resources.input(prhs[0]);
+    Ll = resources.input(prhs[1]);
+    Lu = resources.input(prhs[2]);
+    Dd = resources.input(prhs[3]);
+    Dl = resources.input(prhs[4]);
+    Du = resources.input(prhs[5]);
+    Ud = resources.input(prhs[6]);
+    Ul = resources.input(prhs[7]);
+    Uu = resources.input(prhs[8]);
+
+    const mxGPUArray* inputs[] = {Ld, Ll, Lu, Dd, Dl, Du, Ud, Ul, Uu};
+    for (const auto* input : inputs) {
+        if (mxGPUGetNumberOfDimensions(input) != 2 ||
+            mxGPUGetClassID(input) != mxSINGLE_CLASS ||
+            mxGPUGetComplexity(input) != mxCOMPLEX) {
+            wustFail("WUST:InvalidInput", "Block-LU requires 2D complex-single GPU blocks.");
+        }
+    }
+    if (mxGPUGetDimensions(Dd)[0] < 3 || mxGPUGetDimensions(Dd)[1] < 2 ||
+        mxGPUGetNumberOfElements(Dd) > 2147483647) {
+        wustFail("WUST:InvalidInput", "Block-LU grid must have an interior and fit int indexing.");
+    }
 
     /* Error Checking with Array Dimensions */
-    int Ny = (int) mxGPUGetDimensions(Dd)[0]; 
-    int Nx = (int) mxGPUGetDimensions(Dd)[1]; 
-    if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 || 
-        mxGPUGetDimensions(Ll)[0] != Ny-1 || mxGPUGetDimensions(Ll)[1] != Nx-1 || 
-        mxGPUGetDimensions(Lu)[0] != Ny-1 || mxGPUGetDimensions(Lu)[1] != Nx-1 || 
-        mxGPUGetDimensions(Dd)[0] != Ny || mxGPUGetDimensions(Dd)[1] != Nx || 
-        mxGPUGetDimensions(Dl)[0] != Ny-1 || mxGPUGetDimensions(Dl)[1] != Nx || 
-        mxGPUGetDimensions(Du)[0] != Ny-1 || mxGPUGetDimensions(Du)[1] != Nx || 
-        mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 || 
-        mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 || 
+    int Ny = (int) mxGPUGetDimensions(Dd)[0];
+    int Nx = (int) mxGPUGetDimensions(Dd)[1];
+    if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 ||
+        mxGPUGetDimensions(Ll)[0] != Ny-1 || mxGPUGetDimensions(Ll)[1] != Nx-1 ||
+        mxGPUGetDimensions(Lu)[0] != Ny-1 || mxGPUGetDimensions(Lu)[1] != Nx-1 ||
+        mxGPUGetDimensions(Dd)[0] != Ny || mxGPUGetDimensions(Dd)[1] != Nx ||
+        mxGPUGetDimensions(Dl)[0] != Ny-1 || mxGPUGetDimensions(Dl)[1] != Nx ||
+        mxGPUGetDimensions(Du)[0] != Ny-1 || mxGPUGetDimensions(Du)[1] != Nx ||
+        mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 ||
+        mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 ||
         mxGPUGetDimensions(Uu)[0] != Ny-1 || mxGPUGetDimensions(Uu)[1] != Nx-1) {
         // Print Statements for Nx and Ny
         printf("Nx = %d\n", Nx);
@@ -494,21 +474,21 @@ void mexFunction(int nlhs, mxArray *plhs[],
         printf("Number of Rows in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[0]);
         printf("Number of Columns in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[1]);
         // Throw Error for Incorrect Array Sizes
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
+        wustFail("WUST:InvalidInput",
                           "Invalid input to triDiagMultLeftGPUmex: Input sizes incorrect");
     }
 
     /* Verify that A really is a single array before extracting the pointer. */
-    if (mxGPUGetClassID(Ld) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Ll) != mxSINGLE_CLASS || 
+    if (mxGPUGetClassID(Ld) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ll) != mxSINGLE_CLASS ||
         mxGPUGetClassID(Lu) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Dd) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Dl) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Du) != mxSINGLE_CLASS ||  
-        mxGPUGetClassID(Ud) != mxSINGLE_CLASS || 
-        mxGPUGetClassID(Ul) != mxSINGLE_CLASS || 
+        mxGPUGetClassID(Dd) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Dl) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Du) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ud) != mxSINGLE_CLASS ||
+        mxGPUGetClassID(Ul) != mxSINGLE_CLASS ||
         mxGPUGetClassID(Uu) != mxSINGLE_CLASS) {
-        mexErrMsgIdAndTxt("parallel:gpu:triDiagMultLeftGPUmex:InvalidInput", 
+        wustFail("WUST:InvalidInput",
                           "Invalid input to triDiagMultLeftGPUmex: Inputs should all be single precision");
     }
 
@@ -528,14 +508,14 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Create GPUArrays to hold the intermediate results and get their underlying pointers. */
     mwSize dims_T[2] = {(mwSize) Ny, (mwSize) Ny};
-    T = mxGPUCreateGPUArray(2, dims_T,
+    T = resources.array(2, dims_T,
                             mxGPUGetClassID(Dd),
                             mxGPUGetComplexity(Dd),
                             MX_GPU_DO_NOT_INITIALIZE);
     d_T = (cuComplex *)(mxGPUGetData(T));
     /* Create a GPUArray to hold the final result and get its underlying pointer. */
     mwSize dims_invT[3] = {(mwSize) Ny, (mwSize) Ny, (mwSize) Nx};
-    invT = mxGPUCreateGPUArray(3, dims_invT,
+    invT = resources.array(3, dims_invT,
                                mxGPUGetClassID(Dd),
                                mxGPUGetComplexity(Dd),
                                MX_GPU_INITIALIZE_VALUES);
@@ -552,15 +532,15 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
     /* Prepare cuSOLVER for matrix inversion */
     cusolverDnHandle_t cusolverH;
-    USCT_CUSOLVER_CHECK(cusolverDnCreate(&cusolverH));
+    USCT_CUSOLVER_CHECK(resources.create(&cusolverH));
 #ifdef USCT_TRSM_INVERSE
     cublasHandle_t cublasH;
-    USCT_CUBLAS_CHECK(cublasCreate(&cublasH));
+    USCT_CUBLAS_CHECK(resources.create(&cublasH));
     cuComplex const one = make_cuFloatComplex(1, 0);
 #endif
 #ifdef USCT_GENERIC_GETRF
     cusolverDnParams_t solverParams;
-    USCT_CUSOLVER_CHECK(cusolverDnCreateParams(&solverParams));
+    USCT_CUSOLVER_CHECK(resources.params(&solverParams));
 #ifdef USCT_GENERIC_ALG1
     USCT_CUSOLVER_CHECK(cusolverDnSetAdvOptions(
         solverParams, CUSOLVERDN_GETRF, CUSOLVER_ALG_1));
@@ -575,46 +555,46 @@ void mexFunction(int nlhs, mxArray *plhs[],
         (deviceWorkspaceBytes + sizeof(cuComplex) - 1) / sizeof(cuComplex));
 #else
     int Lwork = 0; // size of work space: determine size of work space on next line
-    USCT_CUSOLVER_CHECK(cusolverDnCgetrf_bufferSize(cusolverH, Ny-2, Ny-2, 
+    USCT_CUSOLVER_CHECK(cusolverDnCgetrf_bufferSize(cusolverH, Ny-2, Ny-2,
                                 &d_T[Ny+1], Ny, &Lwork));
     mwSize mwSizeLwork = (mwSize) Lwork;
 #endif
 
     /* Prepare additional inputs for cuSOLVER: Workspace, devIpiv, devInfo */
-    mxGPUArray * workspace = mxGPUCreateGPUArray(1, &mwSizeLwork,
+    mxGPUArray * workspace = resources.array(1, &mwSizeLwork,
                                                  mxGPUGetClassID(Dd),
                                                  mxGPUGetComplexity(Dd),
                                                  MX_GPU_DO_NOT_INITIALIZE);
     void * d_work = mxGPUGetData(workspace);
     mwSize N = (mwSize) Ny;
 #ifdef USCT_GENERIC_GETRF
-    mxGPUArray * Ipiv = mxGPUCreateGPUArray(1, &N,
+    mxGPUArray * Ipiv = resources.array(1, &N,
                                             mxINT64_CLASS, mxREAL,
                                             MX_GPU_DO_NOT_INITIALIZE);
     int64_t * d_Ipiv = (int64_t *)(mxGPUGetData(Ipiv));
-    void * h_work = hostWorkspaceBytes > 0 ? mxMalloc(hostWorkspaceBytes) : nullptr;
+    void * h_work = hostWorkspaceBytes > 0 ? resources.host(hostWorkspaceBytes) : nullptr;
 #ifdef USCT_CUBLAS_GETRF
-    mxGPUArray *Ipiv32 = mxGPUCreateGPUArray(1, &N,
+    mxGPUArray *Ipiv32 = resources.array(1, &N,
                                              mxINT32_CLASS, mxREAL,
                                              MX_GPU_DO_NOT_INITIALIZE);
     int *d_Ipiv32 = (int *)(mxGPUGetData(Ipiv32));
     cuComplex **d_matrixPointer = nullptr;
-    USCT_CUDA_CHECK(cudaMalloc((void **)&d_matrixPointer, sizeof(cuComplex *)));
+    USCT_CUDA_CHECK(resources.device((void **)&d_matrixPointer, sizeof(cuComplex *)));
     cuComplex *h_matrixPointer = &d_T[Ny+1];
     USCT_CUDA_CHECK(cudaMemcpy(d_matrixPointer, &h_matrixPointer,
         sizeof(cuComplex *), cudaMemcpyHostToDevice));
 #endif
 #else
-    mxGPUArray * Ipiv = mxGPUCreateGPUArray(1, &N,
+    mxGPUArray * Ipiv = resources.array(1, &N,
                                             mxINT32_CLASS, mxREAL,
                                             MX_GPU_DO_NOT_INITIALIZE);
     int * d_Ipiv = (int *)(mxGPUGetData(Ipiv)); // Assuming int is 32 bit
 #endif
     mwSize infoCount = (mwSize) Nx;
-    mxGPUArray * factorInfo = mxGPUCreateGPUArray(1, &infoCount,
+    mxGPUArray * factorInfo = resources.array(1, &infoCount,
                                             mxINT32_CLASS, mxREAL,
                                             MX_GPU_INITIALIZE_VALUES);
-    mxGPUArray * solveInfo = mxGPUCreateGPUArray(1, &infoCount,
+    mxGPUArray * solveInfo = resources.array(1, &infoCount,
                                             mxINT32_CLASS, mxREAL,
                                             MX_GPU_INITIALIZE_VALUES);
     int * d_factorInfo = (int *)(mxGPUGetData(factorInfo));
@@ -627,17 +607,17 @@ void mexFunction(int nlhs, mxArray *plhs[],
     cudaEvent_t totalEnd = nullptr;
     if (collectTimings) {
         for (int page = 0; page < Nx; ++page) {
-            USCT_CUDA_CHECK(cudaEventCreate(&getrfStart[page]));
-            USCT_CUDA_CHECK(cudaEventCreate(&getrfEnd[page]));
-            USCT_CUDA_CHECK(cudaEventCreate(&getrsStart[page]));
-            USCT_CUDA_CHECK(cudaEventCreate(&getrsEnd[page]));
+            USCT_CUDA_CHECK(resources.event(&getrfStart[page]));
+            USCT_CUDA_CHECK(resources.event(&getrfEnd[page]));
+            USCT_CUDA_CHECK(resources.event(&getrsStart[page]));
+            USCT_CUDA_CHECK(resources.event(&getrsEnd[page]));
             if (page < Nx - 1) {
-                USCT_CUDA_CHECK(cudaEventCreate(&schurStart[page]));
-                USCT_CUDA_CHECK(cudaEventCreate(&schurEnd[page]));
+                USCT_CUDA_CHECK(resources.event(&schurStart[page]));
+                USCT_CUDA_CHECK(resources.event(&schurEnd[page]));
             }
         }
-        USCT_CUDA_CHECK(cudaEventCreate(&totalStart));
-        USCT_CUDA_CHECK(cudaEventCreate(&totalEnd));
+        USCT_CUDA_CHECK(resources.event(&totalStart));
+        USCT_CUDA_CHECK(resources.event(&totalEnd));
         USCT_CUDA_CHECK(cudaEventRecord(totalStart));
     }
 
@@ -651,7 +631,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 #endif
 
     /* Calculate the Schur Complements and Their Inverses */
-    triDiagMat<<<dimGridBP, dimBlockBP>>>(d_Dd, d_Dl, d_Du, d_T, Ny);  
+    triDiagMat<<<dimGridBP, dimBlockBP>>>(d_Dd, d_Dl, d_Du, d_T, Ny);
     USCT_KERNEL_CHECK();
     size_t const schurSharedBytes =
         (dimBlockBP.x + 2) * (dimBlockBP.y + 2) * sizeof(cuComplex);
@@ -709,7 +689,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
             &d_solveInfo[x_idx-1]));
 #endif
 #else
-        USCT_CUSOLVER_CHECK(cusolverDnCgetrf(cusolverH, Ny-2, Ny-2, 
+        USCT_CUSOLVER_CHECK(cusolverDnCgetrf(cusolverH, Ny-2, Ny-2,
                          &d_T[Ny+1], Ny, (cuComplex *)d_work, d_Ipiv,
                          &d_factorInfo[x_idx-1]));
         if (collectTimings) {
@@ -717,7 +697,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
             USCT_CUDA_CHECK(cudaEventRecord(getrsStart[x_idx-1]));
         }
         USCT_CUSOLVER_CHECK(cusolverDnCgetrs(cusolverH, CUBLAS_OP_N, Ny-2, Ny-2, /* nrhs */
-                         &d_T[Ny+1], Ny, d_Ipiv, 
+                         &d_T[Ny+1], Ny, d_Ipiv,
                          &d_invT[Ny*Ny*(x_idx-1)+Ny+1], Ny, &d_solveInfo[x_idx-1]));
 #endif
         if (collectTimings) {
@@ -788,7 +768,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
         &d_invT[Ny*Ny*(Nx-1)+Ny+1], Ny, &d_solveInfo[Nx-1]));
 #endif
 #else
-    USCT_CUSOLVER_CHECK(cusolverDnCgetrf(cusolverH, Ny-2, Ny-2, 
+    USCT_CUSOLVER_CHECK(cusolverDnCgetrf(cusolverH, Ny-2, Ny-2,
                      &d_T[Ny+1], Ny, (cuComplex *)d_work, d_Ipiv,
                      &d_factorInfo[Nx-1]));
     if (collectTimings) {
@@ -796,7 +776,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
         USCT_CUDA_CHECK(cudaEventRecord(getrsStart[Nx-1]));
     }
     USCT_CUSOLVER_CHECK(cusolverDnCgetrs(cusolverH, CUBLAS_OP_N, Ny-2, Ny-2, /* nrhs */
-                     &d_T[Ny+1], Ny, d_Ipiv, 
+                     &d_T[Ny+1], Ny, d_Ipiv,
                      &d_invT[Ny*Ny*(Nx-1)+Ny+1], Ny, &d_solveInfo[Nx-1]));
 #endif
     if (collectTimings) {
@@ -810,18 +790,16 @@ void mexFunction(int nlhs, mxArray *plhs[],
     /* Must destroy cuSOLVER handle at the end */
 #ifdef USCT_GENERIC_GETRF
     if (h_work != nullptr) {
-        mxFree(h_work);
+
     }
-    USCT_CUSOLVER_CHECK(cusolverDnDestroyParams(solverParams));
+
 #endif
 #ifdef USCT_CUBLAS_GETRF
-    USCT_CUDA_CHECK(cudaFree(d_matrixPointer));
-    mxGPUDestroyGPUArray(Ipiv32);
+
 #endif
 #ifdef USCT_TRSM_INVERSE
-    USCT_CUBLAS_CHECK(cublasDestroy(cublasH));
+
 #endif
-    USCT_CUSOLVER_CHECK(cusolverDnDestroy(cusolverH)); 
 
     /* Wrap the result up as a MATLAB gpuArray for return. */
     plhs[0] = mxGPUCreateMxArrayOnGPU(invT);
@@ -838,23 +816,18 @@ void mexFunction(int nlhs, mxArray *plhs[],
             USCT_CUDA_CHECK(cudaEventElapsedTime(
                 &elapsed, getrsStart[page], getrsEnd[page]));
             getrsMilliseconds += elapsed;
-            USCT_CUDA_CHECK(cudaEventDestroy(getrfStart[page]));
-            USCT_CUDA_CHECK(cudaEventDestroy(getrfEnd[page]));
-            USCT_CUDA_CHECK(cudaEventDestroy(getrsStart[page]));
-            USCT_CUDA_CHECK(cudaEventDestroy(getrsEnd[page]));
+
             if (page < Nx - 1) {
                 USCT_CUDA_CHECK(cudaEventElapsedTime(
                     &elapsed, schurStart[page], schurEnd[page]));
                 schurMilliseconds += elapsed;
-                USCT_CUDA_CHECK(cudaEventDestroy(schurStart[page]));
-                USCT_CUDA_CHECK(cudaEventDestroy(schurEnd[page]));
+
             }
         }
         float totalMilliseconds = 0;
         USCT_CUDA_CHECK(cudaEventElapsedTime(
             &totalMilliseconds, totalStart, totalEnd));
-        USCT_CUDA_CHECK(cudaEventDestroy(totalStart));
-        USCT_CUDA_CHECK(cudaEventDestroy(totalEnd));
+
         char const *fieldNames[] = {"getrf_ms", "inverse_solve_ms",
             "schur_update_ms", "other_ms", "total_gpu_ms", "block_count"};
         plhs[1] = mxCreateStructMatrix(1, 1, 6, fieldNames);
@@ -871,21 +844,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
      * The mxGPUArray pointers are host-side structures that refer to device
      * data. These must be destroyed before leaving the MEX function.
      */
-    mxGPUDestroyGPUArray(Ld);
-    mxGPUDestroyGPUArray(Ll);
-    mxGPUDestroyGPUArray(Lu);
-    mxGPUDestroyGPUArray(Dd);
-    mxGPUDestroyGPUArray(Dl);
-    mxGPUDestroyGPUArray(Du);
-    mxGPUDestroyGPUArray(Ud);
-    mxGPUDestroyGPUArray(Ul);
-    mxGPUDestroyGPUArray(Uu);
-    mxGPUDestroyGPUArray(T);
-    mxGPUDestroyGPUArray(workspace);
-    mxGPUDestroyGPUArray(Ipiv);
-    mxGPUDestroyGPUArray(factorInfo);
-    mxGPUDestroyGPUArray(solveInfo);
-    mxGPUDestroyGPUArray(invT);
+
+    resources.close();
 }
 #else
 
@@ -900,40 +860,40 @@ void __global__ zeroMatrixBoundary(cuComplex *A, int N)
     }
 }
 
-void mexFunction(int nlhs, mxArray *plhs[],
-                 int nrhs, mxArray const *prhs[])
+void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
+    WustMexResources resources;
     mxInitGPU();
     if (nlhs != 2) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidOutput",
+        wustFail("WUST:InvalidOutput",
             "decompBlockLUFactors requires [luFactors, pivots].");
     }
     if (nrhs != 9) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidInput",
+        wustFail("WUST:InvalidInput",
             "decompBlockLUFactors expects nine gpuArray inputs.");
     }
     for (int input = 0; input < 9; ++input) {
         if (!mxIsGPUArray(prhs[input])) {
-            mexErrMsgIdAndTxt("usct:blocklu:InvalidInput",
+            wustFail("WUST:InvalidInput",
                 "All decompBlockLUFactors inputs must be gpuArray values.");
         }
     }
 
-    mxGPUArray const *Ld = mxGPUCreateFromMxArray(prhs[0]);
-    mxGPUArray const *Ll = mxGPUCreateFromMxArray(prhs[1]);
-    mxGPUArray const *Lu = mxGPUCreateFromMxArray(prhs[2]);
-    mxGPUArray const *Dd = mxGPUCreateFromMxArray(prhs[3]);
-    mxGPUArray const *Dl = mxGPUCreateFromMxArray(prhs[4]);
-    mxGPUArray const *Du = mxGPUCreateFromMxArray(prhs[5]);
-    mxGPUArray const *Ud = mxGPUCreateFromMxArray(prhs[6]);
-    mxGPUArray const *Ul = mxGPUCreateFromMxArray(prhs[7]);
-    mxGPUArray const *Uu = mxGPUCreateFromMxArray(prhs[8]);
+    mxGPUArray const *Ld = resources.input(prhs[0]);
+    mxGPUArray const *Ll = resources.input(prhs[1]);
+    mxGPUArray const *Lu = resources.input(prhs[2]);
+    mxGPUArray const *Dd = resources.input(prhs[3]);
+    mxGPUArray const *Dl = resources.input(prhs[4]);
+    mxGPUArray const *Du = resources.input(prhs[5]);
+    mxGPUArray const *Ud = resources.input(prhs[6]);
+    mxGPUArray const *Ul = resources.input(prhs[7]);
+    mxGPUArray const *Uu = resources.input(prhs[8]);
 
     int Ny = static_cast<int>(mxGPUGetDimensions(Dd)[0]);
     int Nx = static_cast<int>(mxGPUGetDimensions(Dd)[1]);
     int interior = Ny - 2;
     if (Nx < 3 || Ny < 3) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidGrid",
+        wustFail("WUST:InvalidGrid",
             "Block-LU requires Nx and Ny to be at least three.");
     }
     if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 ||
@@ -944,14 +904,14 @@ void mexFunction(int nlhs, mxArray *plhs[],
         mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 ||
         mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 ||
         mxGPUGetDimensions(Uu)[0] != Ny-1 || mxGPUGetDimensions(Uu)[1] != Nx-1) {
-        mexErrMsgIdAndTxt("usct:blocklu:InvalidDimensions",
+        wustFail("WUST:InvalidDimensions",
             "Block diagonal arrays have inconsistent dimensions.");
     }
     mxGPUArray const *inputs[] = {Ld,Ll,Lu,Dd,Dl,Du,Ud,Ul,Uu};
     for (int input = 0; input < 9; ++input) {
         if (mxGPUGetClassID(inputs[input]) != mxSINGLE_CLASS ||
             mxGPUGetComplexity(inputs[input]) != mxCOMPLEX) {
-            mexErrMsgIdAndTxt("usct:blocklu:InvalidType",
+            wustFail("WUST:InvalidType",
                 "All block arrays must be complex single gpuArray values.");
         }
     }
@@ -967,36 +927,36 @@ void mexFunction(int nlhs, mxArray *plhs[],
     cuComplex const *d_Uu = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Uu));
 
     mwSize matrixDims[2] = {static_cast<mwSize>(Ny), static_cast<mwSize>(Ny)};
-    mxGPUArray *T = mxGPUCreateGPUArray(2, matrixDims, mxSINGLE_CLASS,
+    mxGPUArray *T = resources.array(2, matrixDims, mxSINGLE_CLASS,
         mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
-    mxGPUArray *solveScratch = mxGPUCreateGPUArray(2, matrixDims,
+    mxGPUArray *solveScratch = resources.array(2, matrixDims,
         mxSINGLE_CLASS, mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
     cuComplex *d_T = reinterpret_cast<cuComplex *>(mxGPUGetData(T));
     cuComplex *d_solveScratch = reinterpret_cast<cuComplex *>(mxGPUGetData(solveScratch));
 
     mwSize factorDims[3] = {static_cast<mwSize>(Ny), static_cast<mwSize>(Ny),
         static_cast<mwSize>(Nx)};
-    mxGPUArray *luFactors = mxGPUCreateGPUArray(3, factorDims,
+    mxGPUArray *luFactors = resources.array(3, factorDims,
         mxSINGLE_CLASS, mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
     cuComplex *d_luFactors = reinterpret_cast<cuComplex *>(mxGPUGetData(luFactors));
     mwSize pivotDims[2] = {static_cast<mwSize>(interior), static_cast<mwSize>(Nx)};
-    mxGPUArray *pivots = mxGPUCreateGPUArray(2, pivotDims,
+    mxGPUArray *pivots = resources.array(2, pivotDims,
         mxINT32_CLASS, mxREAL, MX_GPU_DO_NOT_INITIALIZE);
     int *d_pivots = reinterpret_cast<int *>(mxGPUGetData(pivots));
 
     cusolverDnHandle_t handle;
-    USCT_CUSOLVER_CHECK(cusolverDnCreate(&handle));
+    USCT_CUSOLVER_CHECK(resources.create(&handle));
     int workspaceSize = 0;
     USCT_CUSOLVER_CHECK(cusolverDnCgetrf_bufferSize(handle, interior, interior,
         &d_luFactors[Ny + 1], Ny, &workspaceSize));
     mwSize workspaceElements = static_cast<mwSize>(workspaceSize);
-    mxGPUArray *workspace = mxGPUCreateGPUArray(1, &workspaceElements,
+    mxGPUArray *workspace = resources.array(1, &workspaceElements,
         mxSINGLE_CLASS, mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
     cuComplex *d_workspace = reinterpret_cast<cuComplex *>(mxGPUGetData(workspace));
     mwSize infoElements = static_cast<mwSize>(Nx);
-    mxGPUArray *factorInfo = mxGPUCreateGPUArray(1, &infoElements,
+    mxGPUArray *factorInfo = resources.array(1, &infoElements,
         mxINT32_CLASS, mxREAL, MX_GPU_INITIALIZE_VALUES);
-    mxGPUArray *solveInfo = mxGPUCreateGPUArray(1, &infoElements,
+    mxGPUArray *solveInfo = resources.array(1, &infoElements,
         mxINT32_CLASS, mxREAL, MX_GPU_INITIALIZE_VALUES);
     int *d_factorInfo = reinterpret_cast<int *>(mxGPUGetData(factorInfo));
     int *d_solveInfo = reinterpret_cast<int *>(mxGPUGetData(solveInfo));
@@ -1034,19 +994,20 @@ void mexFunction(int nlhs, mxArray *plhs[],
     }
     usctCheckDeviceInfo(d_factorInfo, Nx, "getrf");
     usctCheckDeviceInfo(d_solveInfo, Nx, "Schur getrs");
-    USCT_CUSOLVER_CHECK(cusolverDnDestroy(handle));
 
     plhs[0] = mxGPUCreateMxArrayOnGPU(luFactors);
     plhs[1] = mxGPUCreateMxArrayOnGPU(pivots);
     for (int input = 0; input < 9; ++input) {
-        mxGPUDestroyGPUArray(inputs[input]);
+
     }
-    mxGPUDestroyGPUArray(T);
-    mxGPUDestroyGPUArray(solveScratch);
-    mxGPUDestroyGPUArray(workspace);
-    mxGPUDestroyGPUArray(factorInfo);
-    mxGPUDestroyGPUArray(solveInfo);
-    mxGPUDestroyGPUArray(luFactors);
-    mxGPUDestroyGPUArray(pivots);
+
+    resources.close();
 }
 #endif
+
+void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
+{
+    try { runMex(nlhs, plhs, nrhs, prhs); }
+    catch (const WustMexError& error) { mexErrMsgIdAndTxt(error.id.c_str(), "%s", error.what()); }
+    catch (const std::exception& error) { mexErrMsgIdAndTxt("WUST:RuntimeError", "%s", error.what()); }
+}

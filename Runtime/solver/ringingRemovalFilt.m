@@ -8,10 +8,16 @@ function img_out = ringingRemovalFilt(xin, yin, img_in, c0, f, cutoff, ord)
 %   img_in = input image (M x N array)
 %   c0 = reference sound speed [m/s]
 %   f = frequency [Hz]
-%   cutoff = ranging from 0 (only keep DC) to 1 (up to ringing frequency)
+%   cutoff = dimensionless fraction of 2*f/c0 (cycles/m); 0 disables filtering
 %   ord = order of radial Butterworth filter cutoff (Inf for sharp cutoff)
 % OUTPUT:
 %   img_out = output image (M x N array)
+
+validateattributes(cutoff, {'numeric'}, {'scalar', 'real', 'finite', 'nonnegative'});
+if cutoff == 0
+    img_out = img_in;
+    return;
+end
 
 % Number and spacing of input points (assumes a uniform spacing)
 Nxin = numel(xin); dxin = mean(diff(xin));

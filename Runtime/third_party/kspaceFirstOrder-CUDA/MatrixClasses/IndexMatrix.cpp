@@ -52,7 +52,6 @@ IndexMatrix::IndexMatrix(const DimensionSizes& dimensionSizes)
  */
 IndexMatrix::~IndexMatrix()
 {
-  freeMemory();
 }// end of ~IndexMatrix
 //----------------------------------------------------------------------------------------------------------------------
 

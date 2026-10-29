@@ -59,9 +59,7 @@ WholeDomainOutputStream::WholeDomainOutputStream(Hdf5File&            file,
  */
 WholeDomainOutputStream::~WholeDomainOutputStream()
 {
-  close();
-  // Free memory
-  freeMemory();
+  if (mDataset != H5I_BADID) H5Dclose(mDataset);
 }// end of ~WholeDomainOutputStream
 //----------------------------------------------------------------------------------------------------------------------
 

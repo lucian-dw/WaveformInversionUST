@@ -511,7 +511,7 @@ class Hdf5File
     /// Copy constructor not allowed.
     Hdf5File(const Hdf5File&) = delete;
     /// Destructor.
-    virtual ~Hdf5File();
+    virtual ~Hdf5File() noexcept;
 
     /// Operator = not allowed.
     Hdf5File& operator=(const Hdf5File&) = delete;
