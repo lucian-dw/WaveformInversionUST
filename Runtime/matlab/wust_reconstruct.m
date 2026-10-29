@@ -34,7 +34,7 @@ for step=1:n
         val=sum(abs(derivative).^2,'all');if isa(val,'gpuArray'),val=gather(val);end
         denom=denom+double(val);
     end
-    if wustUseGPU,wait(gpuDevice);end
+    if strcmp(cfg.backend,'gpu'),wait(gpuDevice);end
     linearSeconds=toc(linearTimer);alpha=0;
     assert(isfinite(denom)&&denom>=0&&all(isfinite(direction(:))), ...
         'WUST:NumericalFailure','Nonfinite direction/curvature');

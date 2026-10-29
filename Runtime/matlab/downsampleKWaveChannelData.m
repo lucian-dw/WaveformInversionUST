@@ -1,54 +1,34 @@
 function [downsampled, savedTime, metadata] = downsampleKWaveChannelData( ...
-    orderedSensorByTime, originalTime, downsampleFactor, method, varargin)
-%DOWNSAMPLEKWAVECHANNELDATA Downsample k-Wave channels with an auditable policy.
-% orderedSensorByTime is [receiver, time].  The returned data are
-% [saved_time, receiver], matching the archived full_dataset convention.
-
+    pressure_rx_time, originalTime, decimation, varargin)
+% Polyphase FIR decimation: [receiver,time] -> [saved_time,receiver].
+% resample compensates FIR group delay, so the first sample keeps its time.
 parser = inputParser;
 parser.addParameter('filterHalfLength', 24, ...
-    @(x) isnumeric(x) && isscalar(x) && x >= 1);
+    @(x) isnumeric(x) && isscalar(x) && isfinite(x) && x >= 1 && fix(x) == x);
 parser.addParameter('kaiserBeta', 8.6, ...
-    @(x) isnumeric(x) && isscalar(x) && x >= 0);
-parser.parse(varargin{:}); opts = parser.Results;
-
-orderedSensorByTime = single(orderedSensorByTime);
+    @(x) isnumeric(x) && isscalar(x) && isfinite(x) && x >= 0);
+parser.parse(varargin{:});
+opts = parser.Results;
+validateattributes(decimation, {'numeric'}, {'scalar','integer','positive','finite'});
 originalTime = double(originalTime(:).');
-downsampleFactor = round(double(downsampleFactor));
-method = lower(char(string(method)));
-if downsampleFactor < 1
-    error('downsampleFactor must be a positive integer.');
-end
-if size(orderedSensorByTime, 2) ~= numel(originalTime)
-    error('Channel time dimension does not match originalTime.');
-end
-
-switch method
-    case {'stride', 'direct'}
-        downsampled = orderedSensorByTime(:, 1:downsampleFactor:end).';
-        method = 'stride';
-    case {'polyphase', 'fir-polyphase', 'filtered'}
-        % resample applies a zero-phase-compensated Kaiser-windowed FIR
-        % anti-alias filter before decimation.  A longer-than-default
-        % half-length is used so the policy is explicit and reproducible.
-        % R2021b's Signal Processing Toolbox only accepts double input in
-        % resample.  Keep the archived channel-data contract as single while
-        % doing the short anti-alias filtering calculation in double.
-        downsampled = single(resample(double(orderedSensorByTime.'), ...
-            1, downsampleFactor, round(double(opts.filterHalfLength)), ...
-            double(opts.kaiserBeta)));
-        method = 'fir-polyphase';
-    otherwise
-        error('Unknown resampling method: %s.', method);
-end
-
-dt = median(diff(originalTime));
-savedTime = originalTime(1) + (0:size(downsampled, 1)-1) * ...
-    (downsampleFactor * dt);
-metadata = struct('method', method, ...
-    'downsample_factor', downsampleFactor, ...
-    'filter_half_length', round(double(opts.filterHalfLength)), ...
-    'kaiser_beta', double(opts.kaiserBeta), ...
+assert(numel(originalTime) >= 2 && all(isfinite(originalTime)), ...
+    'At least two finite sample times are required.');
+dt = originalTime(2) - originalTime(1);
+assert(dt > 0 && all(abs(diff(originalTime) - dt) <= 1e-6 * dt), ...
+    'Sample times must be increasing and uniform.');
+assert(ismatrix(pressure_rx_time) && size(pressure_rx_time, 2) == numel(originalTime), ...
+    'Pressure must have shape [receiver,time].');
+assert(all(isfinite(pressure_rx_time(:))), 'Pressure must be finite.');
+downsampled = single(resample(double(pressure_rx_time.'), ...
+    1, double(decimation), opts.filterHalfLength, opts.kaiserBeta));
+savedTime = originalTime(1) + (0:size(downsampled, 1)-1) * decimation * dt;
+metadata = struct( ...
+    'method', 'fir-polyphase', ...
+    'downsample_factor', decimation, ...
+    'filter_half_length', opts.filterHalfLength, ...
+    'kaiser_beta', opts.kaiserBeta, ...
     'original_sample_rate_hz', 1 / dt, ...
-    'saved_sample_rate_hz', 1 / (downsampleFactor * dt), ...
-    'nyquist_hz', 1 / (2 * downsampleFactor * dt));
+    'saved_sample_rate_hz', 1 / (decimation * dt), ...
+    'time_origin_s', originalTime(1), ...
+    'nyquist_hz', 1 / (2 * decimation * dt));
 end

@@ -1,6 +1,10 @@
 import importlib.util
+import os
+import runpy
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import h5py
@@ -20,6 +24,33 @@ native = load("native", ROOT / "native/run_native_source_batch.py")
 
 
 class Contracts(unittest.TestCase):
+    def test_installed_launcher_preserves_arguments_and_explicit_batch(self):
+        installer = load("install_launcher", ROOT / "native/install_launcher.py")
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "install_launcher",
+                    "--binary",
+                    sys.executable,
+                    "--directory",
+                    directory,
+                    "--batch-size",
+                    "3",
+                ],
+            ):
+                installer.main()
+            wrapper = Path(directory) / "kspaceFirstOrder-CUDA"
+            with patch.object(
+                sys, "argv", [str(wrapper), "-i", "input with spaces.h5"]
+            ), patch.object(os, "execv") as execute, patch.dict(os.environ):
+                runpy.run_path(str(wrapper), run_name="__main__")
+            executable, arguments = execute.call_args.args
+            self.assertEqual(executable, sys.executable)
+            self.assertEqual(arguments[arguments.index("--batch-size") + 1], "3")
+            self.assertEqual(arguments[-2:], ["-i", "input with spaces.h5"])
+
     def make_input(self, path):
         with h5py.File(path, "w") as h:
             for key, val in {

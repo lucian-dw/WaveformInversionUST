@@ -14,7 +14,7 @@ classdef HelmholtzSolver
     %   L_PML = Length [length] of PML
     %   Computed During Constructor:
     %       HelmholtzEqn = sparse array of dimension Ny*Nx x Ny*Nx
-    %       if wustUseGPU:
+    %       if strcmp(obj.backend, 'gpu'):
     %           Ld = Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
     %           Ll = (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
     %           Lu = (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -35,7 +35,7 @@ classdef HelmholtzSolver
     %           L_PML = Length [length] of PML
     %           Computed During Constructor:
     %               obj.HelmholtzEqn = sparse array of dimension Ny*Nx x Ny*Nx
-    %               if wustUseGPU:
+    %               if strcmp(obj.backend, 'gpu'):
     %                   obj.Ld = Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
     %                   obj.Ll = (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
     %                   obj.Lu = (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -55,7 +55,7 @@ classdef HelmholtzSolver
     %               a0 = PML strength parameter from Chen/Cheng/Feng/Wu 2013 Paper
     %               L_PML = Length [length] of PML
     %               HelmholtzEqn = sparse array of dimension Ny*Nx x Ny*Nx
-    %               if wustUseGPU:
+    %               if strcmp(obj.backend, 'gpu'):
     %                   Ld = Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
     %                   Ll = (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
     %                   Lu = (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -71,6 +71,10 @@ classdef HelmholtzSolver
     %       
     %   Created by Rehman Ali, University of Rochester Medical Center
 
+    properties (SetAccess = private)
+        backend = 'cpu'
+    end
+
     properties
         % 1) Inputs to Constructor
         x % 1xN array of x grid positions
@@ -85,7 +89,7 @@ classdef HelmholtzSolver
         HelmholtzEqn % Sparse System of Equations for Helmholtz Equation
         PML % PML factors over identity term of stencil
         V % Complex Velocity [m/s] for Virtual Source Calculation
-        % 3) Computed During Constructor if wustUseGPU
+        % 3) Computed During Constructor if strcmp(obj.backend, 'gpu')
         Ld % Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
         Ll % (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
         Lu % (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -130,7 +134,7 @@ classdef HelmholtzSolver
             %       a0 = PML strength parameter from Chen/Cheng/Feng/Wu 2013 Paper
             %       L_PML = Length [length] of PML
             %       HelmholtzEqn = sparse array of dimension Ny*Nx x Ny*Nx
-            %       if wustUseGPU:
+            %       if strcmp(obj.backend, 'gpu'):
             %           Ld = Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
             %           Ll = (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
             %           Lu = (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -145,6 +149,11 @@ classdef HelmholtzSolver
             obj.vel = vel; obj.atten = atten;
             obj.f = f; obj.signConvention = signConvention;
             obj.a0 = a0; obj.L_PML = L_PML;
+            if numel(varargin) >= 4
+                obj.backend = char(varargin{4});
+            end
+            assert(ismember(string(obj.backend), ["cpu", "gpu"]), ...
+                'WUST:InvalidInput', 'backend must be cpu or gpu');
             if numel(varargin) >= 2 && ~isempty(varargin{2})
                 obj.factorBackend = lower(char(string(varargin{2})));
             end
@@ -299,13 +308,13 @@ classdef HelmholtzSolver
             % Generate Left-Hand Side of Sparse Array
             obj.PML = C;
             obj.HelmholtzEqn = sparse(rows, cols, vals, Nx*Ny, Nx*Ny);
-            if wustUseGPU
+            if strcmp(obj.backend, 'gpu')
                 obj.virtualSourceMultiplier = ...
                     gpuArray(complex(single(obj.PML.*obj.derivativeSlowness)));
             end
             
             % Compute Block LU Factorization on GPU
-            if wustUseGPU % Check if GPU can be used to solve linear system
+            if strcmp(obj.backend, 'gpu') % Check if GPU can be used to solve linear system
                 % 1) Form the fixed-stencil block arrays directly on GPU.
                 [Dd, Dl, Du, Ld, Ll, Lu, Ud, Ul, Uu] = ...
                     assembleBlockTridiagonalsGPU( ...
@@ -340,7 +349,7 @@ classdef HelmholtzSolver
             %       a0 = PML strength parameter from Chen/Cheng/Feng/Wu 2013 Paper
             %       L_PML = Length [length] of PML
             %       HelmholtzEqn = sparse array of dimension Ny*Nx x Ny*Nx
-            %       if wustUseGPU:
+            %       if strcmp(obj.backend, 'gpu'):
             %           Ld = Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
             %           Ll = (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
             %           Lu = (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -359,7 +368,7 @@ classdef HelmholtzSolver
             [Ny, Nx, Nsrcs] = size(src);
 
             % Solve Helmholtz Equation Depending on Availability of GPU
-            if wustUseGPU
+            if strcmp(obj.backend, 'gpu')
                 % 2) Solve Helmholtz Equation Using Block LU Decomposition
                 src = gpuArray(complex(single(src)));
                 if strcmp(obj.factorBackend, 'factors')
@@ -384,7 +393,7 @@ classdef HelmholtzSolver
 
             % Compute [dH/ds u] where H is Helmholtz matrix and u is the wavefield
             if nargout > 1
-                if wustUseGPU
+                if strcmp(obj.backend, 'gpu')
                     % Create Sparse Matrix
                     % Keep virtual sources resident for adjoint and line search.
                     virtSrcs = obj.virtualSourceMultiplier.*wvfield;

@@ -17,7 +17,7 @@ try
             if isprop(g,field{1}),facts.(field{1})=g.(field{1});end
         end
         wust_setup('gpu');
-        solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,[1400,1700]);
+        solver=HelmholtzSolver(x,x,c,zeros(7),1e5,-1,10,.001,[1400,1700],'inverse',[],'gpu');
         u=solver.solve(q,false);assert(all(isfinite(gather(u(:)))));
         facts.gpu_available=true;
     end

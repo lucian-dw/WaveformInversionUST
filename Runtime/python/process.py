@@ -18,6 +18,28 @@ def interrupted(signum, _frame):
     )
 
 
+def terminate_process_group(child, grace_s=0.2):
+    """Reap our child and stop descendants even if the group leader has exited."""
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        child.wait()
+        return
+    deadline = time.monotonic() + grace_s
+    while time.monotonic() < deadline:
+        child.poll()
+        try:
+            os.killpg(child.pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
+    try:
+        os.killpg(child.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    child.wait()
+
+
 def execute(command, timeout_s):
     if os.name != "posix":
         raise RuntimeError("Supervised execution currently requires POSIX")
@@ -38,17 +60,7 @@ def execute(command, timeout_s):
             signal.signal(signum, signal.SIG_IGN)
         try:
             if child is not None:
-                try:
-                    os.killpg(child.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-                else:
-                    time.sleep(0.2)
-                    try:
-                        os.killpg(child.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                child.wait()
+                terminate_process_group(child)
         finally:
             for signum, handler in previous.items():
                 signal.signal(signum, handler)

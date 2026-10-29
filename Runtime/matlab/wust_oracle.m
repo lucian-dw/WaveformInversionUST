@@ -14,8 +14,8 @@ else
     assert(strcmp(cfg.wavenumber,'continuum'),'Unknown wavenumber model');
 end
 solver=HelmholtzSolver(x,y,double(c),zeros(ny,nx),obs.frequencies_hz(fi), ...
-    -1,cfg.pml_strength,cfg.pml_m,cfg.stencil_bounds,'inverse',spec);
-sync; factorSeconds=toc(t);t=tic;
+    -1,cfg.pml_strength,cfg.pml_m,cfg.stencil_bounds,'inverse',spec,cfg.backend);
+sync(cfg.backend); factorSeconds=toc(t);t=tic;
 gradient=zeros(ny,nx);loss=0;normdata=0;virtual=cell(0);scales=cell(0);
 batch=cfg.source_batch_size;
 assert(batch>=1 && batch==round(batch),'Integer source_batch_size required');
@@ -23,12 +23,12 @@ forwardSeconds=0;adjointSeconds=0;
 for first=1:batch:nt
     ids=first:min(first+batch-1,nt);nb=numel(ids);src=zeros(ny,nx,nb,'single');
     for j=1:nb,src(obs.tx_index(ids(j))+(j-1)*ny*nx)=1;end
-    timer=tic;[u,v]=solver.solve(src,false);sync;forwardSeconds=forwardSeconds+toc(timer);
+    timer=tic;[u,v]=solver.solve(src,false);sync(cfg.backend);forwardSeconds=forwardSeconds+toc(timer);
     u=reshape(u,ny*nx,nb);pred=u(obs.rx_index,:);
     mask=double(obs.mask(ids,:,fi).');data=double(obs.Y(ids,:,fi).');
     assert(all(sum(mask,1)>=2), 'WUST:NumericalFailure', ...
         'Source-scale fitting requires at least two valid receivers per scheduled TX/frequency');
-    if wustUseGPU,mask=gpuArray(single(mask));data=gpuArray(single(data));end
+    if strcmp(cfg.backend,'gpu'),mask=gpuArray(single(mask));data=gpuArray(single(data));end
     pred=pred.*mask;data=data.*mask;
     den=sum(abs(pred).^2,1);num=sum(conj(pred).*data,1);
     assert(all(local(isfinite(den)&den>realmin(classUnderlyingLocal(den)))) && ...
@@ -42,7 +42,7 @@ for first=1:batch:nt
     timer=tic;adj=solver.solve(reshape(rhs,ny,nx,nb),true);
     adj=solver.massApply(adj,true);
     gradient=gradient+double(local(sum(-real(conj(v.*reshape(a,1,1,nb)).*adj),3)));
-    sync;adjointSeconds=adjointSeconds+toc(timer);
+    sync(cfg.backend);adjointSeconds=adjointSeconds+toc(timer);
     virtual{end+1}=v;scales{end+1}=a; %#ok<AGROW>
 end
 assert(isfinite(loss)&&isfinite(normdata)&&all(isfinite(gradient(:))), ...
@@ -58,6 +58,6 @@ end
 function a=local(a)
 if isa(a,'gpuArray'),a=gather(a);end
 end
-function sync
-if wustUseGPU,wait(gpuDevice);end
+function sync(backend)
+if strcmp(backend,'gpu'),wait(gpuDevice);end
 end

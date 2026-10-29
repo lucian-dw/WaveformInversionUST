@@ -41,11 +41,15 @@ obs=struct('x_m',x,'y_m',y,'tx_index',tx,'rx_index',rx, ...
     'frequencies_hz',[.1e6,.12e6],'fourier_sign',-1,'mask',true(3,4,2));
 src=zeros([size(c),3]);for j=1:3,src(tx(j)+(j-1)*numel(c))=1;end
 for k=1:2
-    s=HelmholtzSolver(x,y,c,zeros(size(c)),obs.frequencies_hz(k),-1,10,.004,[1400,1700]);
+    s=HelmholtzSolver(x,y,c,zeros(size(c)),obs.frequencies_hz(k),-1,10,.004,[1400,1700],'inverse',[],backend);
     u=s.solve(src,false);if isa(u,'gpuArray'),u=gather(u);end;u=reshape(u,[],3);
     obs.Y(:,:,k)=u(rx,:).';
 end
 obs=wust_test_measurements(obs);
+% Setup must not change the backend of an already constructed solver.
+wust_setup('cpu');
+repeat = s.solve(src, false);
+assert(isa(repeat, 'gpuArray') == strcmp(backend, 'gpu'));
 initial=1500*ones(size(c));
 [loss,g]=wust_oracle(initial,obs,1,cfg);
 direction=exp(-((X-.002).^2+(Y+.003).^2)/2e-5).*cfg.update_mask;direction=direction*1e-6;

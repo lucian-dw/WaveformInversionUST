@@ -100,3 +100,23 @@ removed; the native backend will be rebuilt at final acceptance.
   CPU/GPU numerical evidence remains the P2 gate, not a new P3 hardware claim.
 
 Next: P4 makes process ownership, sampling and backend selection explicit.
+
+## P4 unit 1: explicit deployment and RF preparation
+
+- Extracted process-group TERM/KILL/reap ownership and made launcher batch size
+  an installation argument. Generated launchers are readable Python argument
+  arrays, including paths with spaces.
+- RF preparation accepts an explicit Grid, preserves actual sample times and
+  performs one geometry preparation. Removed nominal-arrival windows and stride
+  aliases; decimation rejects non-integers and uses polyphase FIR.
+- Helmholtz backend is an instance property. Setup no longer mutates an
+  environment variable, and the global wustUseGPU helper was removed.
+- WUST Python: 16 passed. A100 MATLAB CPU/GPU FD and LDR9 checks retained their
+  P2 errors; four-update loss remained 3.883e-17 -> 8.960e-18. The test now changes
+  setup after constructing a GPU solver and verifies it stays on GPU.
+- Nonzero RF time-origin FIR test: pass ratio 0.999878, alias -72.39 dB;
+  fractional-factor rejection and asymmetric DTFT ingestion passed.
+  Log: /tmp/usct_refactor_p4_runtime_verified.log on A100. Diff check passed.
+
+Next: P4 native CLI/error ownership and BenchLab typed public configuration;
+P5 will simplify the solver constructor/options without changing its backend.

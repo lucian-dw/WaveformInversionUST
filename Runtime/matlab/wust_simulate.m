@@ -61,7 +61,7 @@ for j=1:nt
     if cfg.downsample_factor==1
         channels=ordered.';time=kgrid.t_array;meta=struct('method','none','downsample_factor',1);
     else
-        [channels,time,meta]=downsampleKWaveChannelData(ordered,kgrid.t_array,cfg.downsample_factor,'polyphase');
+        [channels,time,meta]=downsampleKWaveChannelData(ordered,kgrid.t_array,cfg.downsample_factor);
     end
     if isempty(pressure),pressure=zeros(size(channels,1),nr,nt,'single');end
     pressure(:,:,j)=channels;

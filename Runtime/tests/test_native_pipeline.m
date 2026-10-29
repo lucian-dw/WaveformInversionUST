@@ -24,8 +24,10 @@ subset=native.pressure(:,:,selected);
 assert(isequal(size(subset),size(serial.pressure)));
 assert(max(abs(native.time_s-serial.time_s))<1e-15);
 rferr=norm(double(subset(:))-double(serial.pressure(:)))/norm(double(serial.pressure(:)));
-prep=struct('frequencies_hz',(.3:.025:1)*1e6,'x_m',x,'y_m',y,'c_geom_mps',1500, ...
-    'window','none','phase_correction','none','mask',~eye(128));
+grid=struct('shape_yx',size(X),'spacing_yx_m',[.0005,.0005], ...
+    'origin_yx_m',[y(1),x(1)]-.00025,'origin_kind','pixel_edge');
+prep=struct('frequencies_hz',(.3:.025:1)*1e6,'grid',grid,'c_geom_mps',1500, ...
+    'phase_correction','none','mask',~eye(128));
 prep.data_units='Pa*s';prep.measurement_provenance='self_simulated';
 dn=wust_prepare(native,prep);prep.mask=prep.mask(selected,:);ds=wust_prepare(serial,prep);
 subset=dn.Y(selected,:,:);derr=norm(double(subset(:))-double(ds.Y(:)))/norm(double(ds.Y(:)));

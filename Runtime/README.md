@@ -14,6 +14,14 @@ Supported: 2D, sound-speed inversion, fixed zero attenuation.
 |---|---|---|
 | Generate RF | `rf=wust_simulate(model,cfg)` | `wust.simulation_input` |
 | RF → frequencies | `obs=wust_prepare(rf,cfg)` | `wust.rf` |
+
+RF preparation requires `cfg.grid` with `shape_yx`, `spacing_yx_m`,
+`origin_yx_m` and `origin_kind="pixel_edge"`. Sampling times retain their actual
+origin. Decimation uses a positive integer factor and delay-compensated
+polyphase FIR; there is no stride-only or nominal-arrival window alias.
+`phase_correction` is explicitly `none` or `homogeneous-tof`.
+The Helmholtz backend belongs to each solver instance; `wust_setup` only adds
+maintained paths and checks the requested deployment, without changing globals.
 | Frequency ingestion | `obs=wust_prepare_observations(input)` | `wust.frequency_input` or `wust.measurements` |
 | FWI | `result=wust_reconstruct(obs,initial,cfg)` | `wust.measurements` + `wust.initial_model` |
 | Loss/gradient | `[loss,g,state]=wust_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
@@ -70,6 +78,7 @@ make -C Runtime/third_party/kspaceFirstOrder-CUDA -j4 \
   CUDA_DIR=/path/to/cuda HDF5_DIR=/path/to/hdf5 \
   CUDA_ARCH='--generate-code arch=compute_80,code=sm_80'
 python Runtime/native/install_launcher.py \
+  --batch-size 128 \
   --binary /absolute/path/to/kspaceFirstOrder-CUDA \
   --directory /absolute/path/to/new-wrapper-directory \
   --library-dir /path/to/hdf5/lib --library-dir /path/to/cuda/lib64
