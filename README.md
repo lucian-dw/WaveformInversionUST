@@ -26,7 +26,7 @@ Runtime/
   native/                 # optional native simulation tooling
   third_party/            # separately licensed k-Wave CUDA source
 docs/                     # current contracts and usage
-provenance/               # upstream identity, source map and manifests
+provenance/               # attribution and historical source mapping
 reference/upstream-9fb31657/  # original upstream examples, not a production backend
 ```
 
@@ -42,8 +42,7 @@ From the repository root:
 ```sh
 python -m pip install numpy h5py
 python -m unittest discover -s Runtime/tests -p 'test_*.py'
-python Runtime/python/export_schemas.py --check
-python provenance/check_manifest.py
+python Runtime/python/export_schemas.py
 matlab -batch "addpath('Runtime/tests'); test_runtime('cpu'); test_resampling; test_path_isolation; test_ingest_frequency; test_batch_contract;"
 ```
 
@@ -60,10 +59,10 @@ result = wust_reconstruct(obs, initial_mps, config);
 
 `obs` contains supplied complex pressure, frequencies, geometry and a channel
 mask. `initial_mps` is a sound-speed image on that geometry. `config` explicitly
-specifies the frequency-index schedule, numerical controls and update mask.
+specifies a physical Hz schedule, numerical controls and update mask.
 See [the external runtime contract](docs/RUNTIME_API.md) for JSON/HDF5 schemas,
 capabilities, units, array axes and required policies;
-[the runtime guide](Runtime/README.md) covers the batch MAT interface, optional
+[the runtime guide](Runtime/README.md) covers the JSON/HDF5 interface, optional
 GPU build and simulation. [The CPU test](Runtime/tests/test_runtime.m) is a
 complete finite-input reconstruction example with every required configuration
 field. Its generated observations are a numerical fixture, not measured data.
@@ -73,11 +72,12 @@ python Runtime/python/wust_runtime.py describe --json
 python Runtime/python/wust_runtime.py run /absolute/request.json --matlab matlab --timeout-s 300
 ```
 
-The maintained protocol uses `wust.*` schema names plus integer `schema_version`.
-Historical `wfi.*.v1`/MAT requests are rejected with migration guidance. Direct
-frequency ingestion and RF preparation share WUST geometry and indexing rules.
-Pin a commit SHA alongside `Runtime/VERSION`; schedule completion does not
-establish numerical convergence. No attenuation reconstruction is supported.
+The maintained protocol uses `wust.*` schema names and integer `schema_version=2`.
+Frequency input or canonical measurements enter reconstruction in one MATLAB
+process. Ingestion and RF tooling share the same physical preparation function.
+Runtime/VERSION records software version; no source identity gate is used.
+Schedule completion does not establish numerical convergence. No attenuation
+reconstruction is supported.
 
 ## Attribution and licenses
 

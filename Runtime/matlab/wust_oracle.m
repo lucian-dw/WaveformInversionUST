@@ -2,7 +2,6 @@ function [loss,gradient,cache]=wust_oracle(c,obs,fi,cfg)
 % Single-frequency source-projected least squares, exact discrete adjoint.
 % Output gradient is w.r.t. SLOWNESS, not velocity; no filtering here.
 % Per-TX complex scale a=(u'*d)/(u'*u); envelope theorem removes da/ds.
-obs=wust_validate_measurements(obs);
 t=tic; x=obs.x_m;y=obs.y_m;[ny,nx]=size(c);nt=numel(obs.tx_index);
 assert(isequal(size(c),[numel(y),numel(x)]) && all(isfinite(c(:))&c(:)>0),'Invalid medium grid');
 assert(all(diff(x)>0) && all(diff(y)>0),'Grid must increase');

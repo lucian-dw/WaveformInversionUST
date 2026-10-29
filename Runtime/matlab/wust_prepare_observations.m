@@ -1,7 +1,20 @@
-function obs = wust_ingest_frequency(input)
+function obs = wust_prepare_observations(input)
 % One owner for geometry, frequency order, masks and Fourier conversion.
-wust_assert_schema(input, 'wust.frequency_input');
+wust_assert_schema(input, {'wust.frequency_input','wust.measurements'});
+canonical = strcmp(input.schema, 'wust.measurements');
+if canonical
+    input.pressure = input.Y;
+    input.pressure_axes = 'tx,rx,frequency';
+    input.mask_axes = 'tx,rx,frequency';
+    assert(input.fourier_sign == -1, 'WUST:InvalidInput', ...
+        'Canonical observations require Fourier sign -1');
+end
 geo = wust_geometry(input.grid, input.tx_xy_m, input.rx_xy_m);
+if canonical
+    assert(isequal(input.tx_index(:),geo.tx_index(:)) && ...
+        isequal(input.rx_index(:),geo.rx_index(:)), 'WUST:InvalidInput', ...
+        'Canonical sampling indices disagree with geometry');
+end
 f = double(input.frequencies_hz(:));
 assert(~isempty(f) && all(isfinite(f)&f>0) && numel(unique(f))==numel(f), ...
     'WUST:InvalidInput', 'Frequencies must be finite, positive and unique');
@@ -39,17 +52,22 @@ if input.fourier_sign==1
 end
 [sorted, order] = sort(f); Y = Y(:,:,order); mask = mask(:,:,order);
 obs = geo;
-obs.schema = 'wust.measurements'; obs.schema_version = 1;
+obs.schema = 'wust.measurements'; obs.schema_version = 2;
 obs.Y = Y; obs.mask = mask; obs.frequencies_hz = sorted; obs.fourier_sign = -1;
 obs.grid = input.grid; obs.data_units = input.data_units;
 obs.spectrum_normalization = input.spectrum_normalization;
 obs.pressure_type = 'total_pressure';
+provenance = 'unknown';
+if isfield(input,'measurement_provenance'),provenance=input.measurement_provenance;end
 obs.preparation = struct('input_fourier_sign',input.fourier_sign, ...
     'conversion',conversion,'input_frequencies_hz',f, ...
     'canonical_to_input_permutation_1based',order, ...
     'input_pressure_axes',input.pressure_axes,'input_mask_axes',input.mask_axes, ...
     'phase_correction','none','masked_values_policy','zero_after_preserving_mask', ...
-    'input_precision',class(Y),'measurement_provenance',input.measurement_provenance);
+    'input_precision',class(Y),'measurement_provenance',provenance);
+if canonical && isfield(input,'preparation')
+    obs.preparation = input.preparation;
+end
 end
 
 function a = layout(a, axes)

@@ -273,11 +273,6 @@ class Parameters
      */
     void writeScalarsToOutputFile();
 
-    /**
-     * @brief  Get git hash of the code.
-     * @return Git hash compiled in using -D parameter.
-     */
-    std::string getGitHash() const;
 
     /**
      * @brief Select Cuda device for execution.

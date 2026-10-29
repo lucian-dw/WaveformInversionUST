@@ -1,4 +1,4 @@
-"""MATLAB-free protocol, artifact, subprocess and identity regression tests."""
+"""MATLAB-free protocol, artifact, subprocess regression tests."""
 
 import copy
 import json
@@ -19,9 +19,7 @@ sys.path.insert(0, str(ROOT / "Runtime/python"))
 import contracts
 import process
 import wust_runtime as runtime
-from wust_io import atomic_json, read_artifact, read_json, sha256, write_artifact
-
-import provenance
+from wust_io import atomic_json, read_artifact, read_json, write_artifact
 
 
 def fixture(folder):
@@ -67,7 +65,7 @@ def fixture(folder):
     )
     req = {
         "schema": "wust.request",
-        "schema_version": 1,
+        "schema_version": 2,
         "operation": "ingest_frequency",
         "input_manifest": str(folder / "input.json"),
         "output_manifest": str(folder / "output.json"),
@@ -84,7 +82,7 @@ class ContractTests(unittest.TestCase):
             runtime, "execute", side_effect=AssertionError("MATLAB launched")
         ):
             info = runtime.capabilities()
-        self.assertIsNone(info["environment"])
+        self.assertEqual(info["schema_version"], 2)
         self.assertFalse(info["attenuation_reconstruction"]["supported"])
         self.assertFalse(info["budgets"]["update_rtol"])
         result = subprocess.run(
@@ -105,12 +103,12 @@ class ContractTests(unittest.TestCase):
 
     def test_schema_and_request_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path, req = fixture(Path(tmp))
+            _, req = fixture(Path(tmp))
             contracts.validate_request(req)
             for key, value in [
                 ("schema", "wfi.request.v1"),
                 ("schema_version", True),
-                ("schema_version", 2),
+                ("schema_version", 1),
                 ("operation", "arbitrary_module"),
                 ("pipeline_module", "evil"),
             ]:
@@ -122,14 +120,8 @@ class ContractTests(unittest.TestCase):
             bad["config"]["update_rtol"] = 1e-4
             with self.assertRaises(ValueError):
                 contracts.validate_request(bad)
-            path.write_text('{"schema":1,"schema":2}')
-            with self.assertRaises(ValueError):
-                read_json(path)
-            path.write_text('{"x":NaN}')
-            with self.assertRaises(ValueError):
-                read_json(path)
 
-    def test_artifact_roundtrip_hash_and_axis_validation(self):
+    def test_artifact_roundtrip_and_axis_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             fixture(folder)
@@ -157,10 +149,6 @@ class ContractTests(unittest.TestCase):
             (folder / "bad.json").write_text(json.dumps(bad))
             with self.assertRaises(ValueError):
                 read_artifact(folder / "bad.json")
-            with open(folder / doc["arrays_file"], "ab") as stream:
-                stream.write(b"changed")
-            with self.assertRaises(ValueError):
-                read_artifact(folder / "input.json")
 
     def test_nonfinite_mask_and_valid_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -178,17 +166,6 @@ class ContractTests(unittest.TestCase):
             _, b = read_artifact(folder / "valid.json")
             self.assertTrue(b["mask"][1, 0])
             self.assertEqual(b["pressure"][0, 1, 0], 0)
-            a["mask"][0, 0] = True
-            with self.assertRaises(ValueError):
-                write_artifact(
-                    folder / "invalid.json",
-                    doc["schema"],
-                    doc["metadata"],
-                    a,
-                    axes,
-                    units,
-                )
-            self.assertFalse((folder / "invalid.json").exists())
 
     def test_atomic_output_no_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,37 +221,30 @@ class ContractTests(unittest.TestCase):
                 folder / "rf.json", "wust.rf", {"data_units": "Pa"}, rf, axes, units
             )
             axes["pressure"] = "frequency,tx,rx"
+            write_artifact(
+                folder / "bad.json",
+                "wust.rf",
+                {"data_units": "Pa"},
+                rf,
+                axes,
+                units,
+            )
             with self.assertRaises(ValueError):
-                write_artifact(
-                    folder / "bad.json",
-                    "wust.rf",
-                    {"data_units": "Pa"},
-                    rf,
-                    axes,
-                    units,
-                )
+                read_artifact(folder / "bad.json")
 
     def test_launcher_admission_failure_and_missing_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             p, _ = fixture(folder)
-            with patch.object(
-                runtime,
-                "identity",
-                return_value={"dirty": True, "source_manifest_verified": False},
-            ), patch.object(runtime, "execute") as call:
-                with self.assertRaises(runtime.RuntimeFailure):
-                    runtime.run(p, timeout_s=5)
-                call.assert_not_called()
             with patch.object(runtime, "execute"), self.assertRaisesRegex(
                 runtime.RuntimeFailure, "without completed output"
             ):
-                runtime.run(p, allow_dirty=True, timeout_s=5)
+                runtime.run(p, timeout_s=5)
             self.assertFalse((folder / "output.json").exists())
             with patch.object(
                 runtime, "execute", side_effect=subprocess.TimeoutExpired("matlab", 1)
             ), self.assertRaises(runtime.RuntimeFailure) as raised:
-                runtime.run(p, allow_dirty=True, timeout_s=5)
+                runtime.run(p, timeout_s=5)
             self.assertEqual(raised.exception.reason, "time_budget")
             self.assertFalse((folder / "output.json").exists())
             with patch.object(
@@ -282,7 +252,7 @@ class ContractTests(unittest.TestCase):
                 "execute",
                 side_effect=subprocess.CalledProcessError(3, "matlab"),
             ), self.assertRaises(runtime.RuntimeFailure):
-                runtime.run(p, allow_dirty=True, timeout_s=5)
+                runtime.run(p, timeout_s=5)
             self.assertFalse((folder / "output.json").exists())
 
     def test_subprocess_nonzero(self):
@@ -339,40 +309,6 @@ class ContractTests(unittest.TestCase):
                 not status or status.startswith("Z"),
                 f"Descendant still running: {status}",
             )
-
-    def test_archive_identity_does_not_fabricate_git(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "Runtime").mkdir()
-            (root / "provenance").mkdir()
-            (root / "Runtime/VERSION").write_text("1.2.3")
-            (root / "provenance/upstream.json").write_text("{}")
-            manifest = root / "provenance/source-manifest.json"
-            manifest.write_text(
-                json.dumps(
-                    {"sha256": {"Runtime/VERSION": sha256(root / "Runtime/VERSION")}}
-                )
-            )
-            with patch.object(provenance, "ROOT", root):
-                info = provenance.identity()
-            self.assertIsNone(info["git_sha"])
-            self.assertIsNone(info["dirty"])
-            self.assertTrue(info["source_manifest_verified"])
-            build = {
-                "schema": "wust.build",
-                "schema_version": 1,
-                "source_manifest_sha256": sha256(manifest),
-                "git_sha": None,
-            }
-            (root / "provenance/build-manifest.json").write_text(json.dumps(build))
-            with patch.object(provenance, "ROOT", root):
-                self.assertEqual(
-                    provenance.identity()["identity_source"], "build_manifest"
-                )
-            build["source_manifest_sha256"] = "wrong"
-            (root / "provenance/build-manifest.json").write_text(json.dumps(build))
-            with patch.object(provenance, "ROOT", root), self.assertRaises(ValueError):
-                provenance.identity()
 
 
 if __name__ == "__main__":

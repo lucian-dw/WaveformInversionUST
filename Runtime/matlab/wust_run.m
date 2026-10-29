@@ -1,5 +1,5 @@
 function wust_run(requestPath)
-% Private batch dispatch after Python envelope/admission validation.
+% Single-process physical preparation and dispatch after transport validation.
 req=jsondecode(fileread(requestPath));wust_assert_schema(req,'wust.request');
 assert(~isfile(req.output_manifest),'WUST:InvalidInput','Output exists');
 timer=tic;
@@ -7,7 +7,7 @@ try
     switch req.operation
         case 'ingest_frequency'
             input=wust_read_artifact(req.input_manifest,'wust.frequency_input');
-            result=wust_ingest_frequency(input);
+            result=wust_prepare_observations(input);
         case 'prepare'
             rf=wust_read_artifact(req.input_manifest,'wust.rf');
             cfg=req.config;geo=wust_geometry(cfg.grid,rf.tx_xy_m,rf.rx_xy_m);
@@ -16,12 +16,13 @@ try
             cfg.measurement_provenance=rf.measurement_provenance;
             result=wust_prepare(rf,cfg);
         case 'reconstruct'
-            obs=wust_read_artifact(req.input_manifest,'wust.measurements');
+            obs=wust_read_artifact(req.input_manifest,{'wust.frequency_input','wust.measurements'});
             initial=wust_read_artifact(req.initial_manifest,'wust.initial_model');
-            cfg=req.config;cfg.schedule=req.schedule;cfg.update_mask=initial.update_mask;
-            if isfield(req,'planned_schedule_length'),cfg.planned_schedule_length=req.planned_schedule_length;end
+            cfg=req.config;cfg.update_mask=initial.update_mask;
+            for name={'frequency_schedule_hz','max_updates','save_history'}
+                if isfield(req,name{1}),cfg.(name{1})=req.(name{1});end
+            end
             result=wust_reconstruct(obs,initial.initial_mps,cfg);
-            result.observation_preparation=obs.preparation;
         case 'simulate'
             model=wust_read_artifact(req.input_manifest,'wust.simulation_input');
             geo=wust_geometry(model.grid,model.tx_xy_m,model.rx_xy_m);
@@ -44,8 +45,8 @@ try
     end
     wust_write_artifact(req.output_manifest,result);
 catch err
-    failure=struct('schema','wust.execution_failure','schema_version',1,'identifier',err.identifier,'message',err.message);
-    fid=fopen(req.output_manifest,'w');
+    failure=struct('schema','wust.execution_failure','schema_version',2,'identifier',err.identifier,'message',err.message);
+    fid=fopen(fullfile(fileparts(req.output_manifest),'failure.json'),'w');
     if fid>=0,fprintf(fid,'%s',jsonencode(failure));fclose(fid);end
     rethrow(err);
 end

@@ -1,53 +1,119 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
   "additionalProperties": false,
+  "required": [
+    "config",
+    "input_manifest",
+    "operation",
+    "output_manifest",
+    "schema",
+    "schema_version"
+  ],
   "properties": {
+    "schema": {
+      "const": "wust.request"
+    },
+    "schema_version": {
+      "const": 2,
+      "type": "integer"
+    },
+    "operation": {
+      "enum": [
+        "ingest_frequency",
+        "prepare",
+        "reconstruct",
+        "simulate"
+      ]
+    },
+    "input_manifest": {
+      "type": "string"
+    },
+    "output_manifest": {
+      "type": "string"
+    },
     "config": {
       "type": "object"
     },
     "initial_manifest": {
       "type": "string"
     },
-    "input_manifest": {
-      "type": "string"
-    },
-    "operation": {
-      "enum": [
-        "ingest_frequency",
-        "reconstruct",
-        "prepare",
-        "simulate"
-      ]
-    },
-    "output_manifest": {
-      "type": "string"
-    },
-    "planned_schedule_length": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "schedule": {
+    "frequency_schedule_hz": {
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
-        "minimum": 1,
-        "type": "integer"
-      },
-      "type": "array"
+        "type": "number",
+        "exclusiveMinimum": 0
+      }
     },
-    "schema": {
-      "const": "wust.request"
+    "max_updates": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
     },
-    "schema_version": {
-      "const": 1,
-      "type": "integer"
+    "save_history": {
+      "type": "boolean"
     }
   },
-  "required": [
-    "schema",
-    "schema_version",
-    "operation",
-    "input_manifest",
-    "output_manifest",
-    "config"
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "reconstruct"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "initial_manifest"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "frequency_schedule_hz"
+              ]
+            },
+            {
+              "required": [
+                "initial_manifest"
+              ]
+            },
+            {
+              "required": [
+                "max_updates"
+              ]
+            },
+            {
+              "required": [
+                "save_history"
+              ]
+            }
+          ]
+        }
+      }
+    }
   ],
-  "type": "object"
+  "x-input-schemas": {
+    "ingest_frequency": [
+      "wust.frequency_input"
+    ],
+    "prepare": [
+      "wust.rf"
+    ],
+    "reconstruct": [
+      "wust.frequency_input",
+      "wust.measurements"
+    ],
+    "simulate": [
+      "wust.simulation_input"
+    ]
+  }
 }

@@ -62,3 +62,28 @@ Next: jointly migrate BenchLab/WUST protocol v2 in P2, including identity-chain
 removal. No P2-P6 completion is claimed. Historical references and observations
 are untouched. GPU acceptance covers representative fixtures, not clinical data
 or a new imaging-quality campaign.
+
+## P2: protocol v2 and single-process reconstruction
+
+- Unified frequency/canonical preparation in wust_prepare_observations; removed
+  the old ingestion/measurement/reconstruction validation wrappers. Oracle
+  consumes prepared observations without rescanning them each update.
+- Physical Hz schedule is mapped and capped once in MATLAB; optional history
+  defaults off. Reconstruction numerical update order is unchanged.
+- One field table exports seven schemas and drives MATLAB/Python array layout.
+  Removed identity manifests, snapshot/hash passes and repeated full readback.
+  Runtime records version/backend/precision; errors use a separate failure file.
+- Python: 15 tests passed. Removed identity-only tests, preserving numerical,
+  transport, valid-zero, process termination and timeout coverage.
+- A100 BenchLab/WUST CPU and GPU integration passed. One MATLAB reconstruction
+  invocation per run, plus separately recorded coherent fixture generation.
+- A100 numerical tests passed: CPU FD 1.64326e-10, GPU FD 0.001112;
+  CPU LDR9 2.31723e-10, GPU LDR9 0.000430214. Four-update losses remained
+  approximately 3.883e-17 -> 8.960e-18. Asymmetric ingestion, masked invalid
+  pressure, valid zero, RF DTFT, history opt-in and zero/truncated budgets passed.
+- Logs/results: /tmp/usct_refactor_v2_math.log, /tmp/usct_refactor_v2_cpu,
+  /tmp/usct_refactor_v2_gpu on A100. Default CI still needs no MATLAB/GPU.
+
+Next: P3 removes historical runtime duplicates and relocates research material
+to sibling research_archive with an index. Native display-only Git labels were
+removed; the native backend will be rebuilt at final acceptance.

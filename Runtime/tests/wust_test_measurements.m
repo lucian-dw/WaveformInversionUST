@@ -7,7 +7,7 @@ obs.grid=struct('shape_yx',[numel(obs.y_m),numel(obs.x_m)], ...
 [r,c]=ind2sub(obs.grid.shape_yx,obs.tx_index);obs.tx_xy_m=[reshape(obs.x_m(c),[],1),reshape(obs.y_m(r),[],1)];
 [r,c]=ind2sub(obs.grid.shape_yx,obs.rx_index);obs.rx_xy_m=[reshape(obs.x_m(c),[],1),reshape(obs.y_m(r),[],1)];
 obs.tx_snapped_xy_m=obs.tx_xy_m;obs.rx_snapped_xy_m=obs.rx_xy_m;
-obs.schema='wust.measurements';obs.schema_version=1;
-obs.data_units='unknown';obs.spectrum_normalization='unknown';
+obs.schema='wust.measurements';obs.schema_version=2;
+obs.pressure_type='total_pressure';obs.data_units='unknown';obs.spectrum_normalization='unknown';
 obs.preparation=struct('measurement_provenance','numerical_fixture');
 end

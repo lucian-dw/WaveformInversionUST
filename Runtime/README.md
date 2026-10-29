@@ -14,7 +14,7 @@ Supported: 2D, sound-speed inversion, fixed zero attenuation.
 |---|---|---|
 | Generate RF | `rf=wust_simulate(model,cfg)` | `wust.simulation_input` |
 | RF → frequencies | `obs=wust_prepare(rf,cfg)` | `wust.rf` |
-| Frequency ingestion | `obs=wust_ingest_frequency(input)` | `wust.frequency_input` |
+| Frequency ingestion | `obs=wust_prepare_observations(input)` | `wust.frequency_input` or `wust.measurements` |
 | FWI | `result=wust_reconstruct(obs,initial,cfg)` | `wust.measurements` + `wust.initial_model` |
 | Loss/gradient | `[loss,g,state]=wust_oracle(c,obs,fi,cfg)` | direct MATLAB; g is slowness gradient |
 

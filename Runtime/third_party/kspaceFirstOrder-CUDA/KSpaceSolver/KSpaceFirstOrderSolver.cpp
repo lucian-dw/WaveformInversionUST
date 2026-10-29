@@ -638,10 +638,6 @@ void KSpaceFirstOrderSolver::printFullCodeNameAndLicense() const
 {
   Logger::log(Logger::LogLevel::kBasic, kOutFmtBuildNoDataTime, 10, 11, __DATE__, 8, 8, __TIME__);
 
-  if (mParameters.getGitHash() != "")
-  {
-    Logger::log(Logger::LogLevel::kBasic, kOutFmtVersionGitHash, mParameters.getGitHash().c_str());
-  }
   Logger::log(Logger::LogLevel::kBasic, kOutFmtSeparator);
 
   // OS detection

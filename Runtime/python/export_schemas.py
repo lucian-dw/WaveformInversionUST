@@ -1,65 +1,65 @@
-"""Generate structural JSON Schemas from the maintained contract definitions."""
+"""Export the seven v2 schemas and MATLAB array field definitions."""
 
-import argparse
 import json
 from pathlib import Path
 
-from contracts import ARRAYS, AXES, SCHEMAS, request_json_schema
+from contracts import FIELDS, PROTOCOL_VERSION, request_json_schema
 
 DESTINATION = Path(__file__).resolve().parents[1] / "schemas"
 
 
 def definitions():
-    documents = {"wust.request": request_json_schema()}
-    for name, fields in ARRAYS.items():
-        properties = {}
-        for field in sorted(fields):
-            spec = {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["axes", "shape", "dtype", "units"],
-                "properties": {
-                    "axes": {"enum": AXES[field]},
-                    "shape": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {"type": "integer", "minimum": 1},
-                    },
-                    "dtype": {
-                        "enum": [
-                            "float32",
-                            "float64",
-                            "complex64",
-                            "complex128",
-                            "bool",
-                            "uint8",
-                            "int64",
-                        ]
-                    },
-                    "units": {"type": "string"},
-                    "dataset": {"type": "string", "pattern": "^/"},
-                    "real_dataset": {"type": "string", "pattern": "^/"},
-                    "imag_dataset": {"type": "string", "pattern": "^/"},
+    descriptor = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["axes", "shape", "dtype", "units"],
+        "properties": {
+            "axes": {"type": "string"},
+            "units": {"type": "string"},
+            "dtype": {"type": "string"},
+            "shape": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "integer", "minimum": 1},
+            },
+            **{
+                key: {"type": "string", "pattern": "^/"}
+                for key in ("dataset", "real_dataset", "imag_dataset")
+            },
+        },
+        "oneOf": [
+            {
+                "required": ["dataset"],
+                "not": {
+                    "anyOf": [
+                        {"required": ["real_dataset"]},
+                        {"required": ["imag_dataset"]},
+                    ]
                 },
-                "oneOf": [
-                    {
-                        "required": ["dataset"],
-                        "not": {
-                            "anyOf": [
-                                {"required": ["real_dataset"]},
-                                {"required": ["imag_dataset"]},
-                            ]
-                        },
-                    },
-                    {
-                        "required": ["real_dataset", "imag_dataset"],
-                        "not": {"required": ["dataset"]},
-                    },
-                ],
+            },
+            {
+                "required": ["real_dataset", "imag_dataset"],
+                "not": {"required": ["dataset"]},
+            },
+        ],
+    }
+    documents = {"wust.request": request_json_schema()}
+    for name, fields in FIELDS.items():
+        properties = {}
+        for key, field in fields.items():
+            properties[key] = {
+                "$ref": "#/$defs/array",
+                "properties": {
+                    "axes": {"enum": field["axes"]},
+                    "dtype": {"enum": field["dtypes"]},
+                },
             }
-            properties[field] = spec
+            if field["units"] != "data_units":
+                properties[key]["properties"]["units"] = {"const": field["units"]}
         documents[name] = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$defs": {"array": descriptor},
+            "array_fields": fields,
             "type": "object",
             "additionalProperties": False,
             "required": [
@@ -67,19 +67,19 @@ def definitions():
                 "schema_version",
                 "metadata",
                 "arrays_file",
-                "arrays_sha256",
                 "arrays",
             ],
             "properties": {
                 "schema": {"const": name},
-                "schema_version": {"type": "integer", "const": SCHEMAS[name]},
+                "schema_version": {"type": "integer", "const": PROTOCOL_VERSION},
                 "metadata": {"type": "object"},
                 "arrays_file": {"type": "string", "pattern": "^[^/\\\\]+$"},
-                "arrays_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                 "arrays": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": sorted(fields),
+                    "required": [
+                        key for key, spec in fields.items() if not spec["optional"]
+                    ],
                     "properties": properties,
                 },
             },
@@ -88,18 +88,11 @@ def definitions():
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true")
-    args = parser.parse_args()
     DESTINATION.mkdir(exist_ok=True)
     for name, document in definitions().items():
-        path = DESTINATION / (name + ".json")
-        content = json.dumps(document, indent=2, sort_keys=True) + "\n"
-        if args.check:
-            if not path.exists() or path.read_text() != content:
-                raise ValueError(f"Generated schema differs: {path.name}")
-        else:
-            path.write_text(content)
+        (DESTINATION / (name + ".json")).write_text(
+            json.dumps(document, indent=2) + "\n"
+        )
 
 
 if __name__ == "__main__":

@@ -1,379 +1,234 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "arrays": {
+  "$defs": {
+    "array": {
+      "type": "object",
       "additionalProperties": false,
+      "required": [
+        "axes",
+        "shape",
+        "dtype",
+        "units"
+      ],
+      "properties": {
+        "axes": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "dtype": {
+          "type": "string"
+        },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "dataset": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "real_dataset": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "imag_dataset": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "dataset"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "real_dataset"
+                ]
+              },
+              {
+                "required": [
+                  "imag_dataset"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "real_dataset",
+            "imag_dataset"
+          ],
+          "not": {
+            "required": [
+              "dataset"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "array_fields": {
+    "pressure": {
+      "axes": [
+        "time,rx,tx"
+      ],
+      "units": "data_units",
+      "dtypes": [
+        "float32",
+        "float64"
+      ],
+      "optional": false
+    },
+    "time_s": {
+      "axes": [
+        "time"
+      ],
+      "units": "s",
+      "dtypes": [
+        "float32",
+        "float64"
+      ],
+      "optional": false
+    },
+    "tx_xy_m": {
+      "axes": [
+        "tx,xy"
+      ],
+      "units": "m",
+      "dtypes": [
+        "float32",
+        "float64"
+      ],
+      "optional": false
+    },
+    "rx_xy_m": {
+      "axes": [
+        "rx,xy"
+      ],
+      "units": "m",
+      "dtypes": [
+        "float32",
+        "float64"
+      ],
+      "optional": false
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "metadata",
+    "arrays_file",
+    "arrays"
+  ],
+  "properties": {
+    "schema": {
+      "const": "wust.rf"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "arrays_file": {
+      "type": "string",
+      "pattern": "^[^/\\\\]+$"
+    },
+    "arrays": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pressure",
+        "time_s",
+        "tx_xy_m",
+        "rx_xy_m"
+      ],
       "properties": {
         "pressure": {
-          "additionalProperties": false,
-          "oneOf": [
-            {
-              "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "real_dataset"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "imag_dataset"
-                    ]
-                  }
-                ]
-              },
-              "required": [
-                "dataset"
-              ]
-            },
-            {
-              "not": {
-                "required": [
-                  "dataset"
-                ]
-              },
-              "required": [
-                "real_dataset",
-                "imag_dataset"
-              ]
-            }
-          ],
+          "$ref": "#/$defs/array",
           "properties": {
             "axes": {
               "enum": [
-                "frequency,tx,rx",
-                "tx,rx,frequency",
                 "time,rx,tx"
               ]
             },
-            "dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
             "dtype": {
               "enum": [
                 "float32",
-                "float64",
-                "complex64",
-                "complex128",
-                "bool",
-                "uint8",
-                "int64"
-              ]
-            },
-            "imag_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "real_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "shape": {
-              "items": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
-            "units": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "axes",
-            "shape",
-            "dtype",
-            "units"
-          ],
-          "type": "object"
-        },
-        "rx_xy_m": {
-          "additionalProperties": false,
-          "oneOf": [
-            {
-              "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "real_dataset"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "imag_dataset"
-                    ]
-                  }
-                ]
-              },
-              "required": [
-                "dataset"
-              ]
-            },
-            {
-              "not": {
-                "required": [
-                  "dataset"
-                ]
-              },
-              "required": [
-                "real_dataset",
-                "imag_dataset"
+                "float64"
               ]
             }
-          ],
-          "properties": {
-            "axes": {
-              "enum": [
-                "rx,xy"
-              ]
-            },
-            "dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "dtype": {
-              "enum": [
-                "float32",
-                "float64",
-                "complex64",
-                "complex128",
-                "bool",
-                "uint8",
-                "int64"
-              ]
-            },
-            "imag_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "real_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "shape": {
-              "items": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
-            "units": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "axes",
-            "shape",
-            "dtype",
-            "units"
-          ],
-          "type": "object"
+          }
         },
         "time_s": {
-          "additionalProperties": false,
-          "oneOf": [
-            {
-              "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "real_dataset"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "imag_dataset"
-                    ]
-                  }
-                ]
-              },
-              "required": [
-                "dataset"
-              ]
-            },
-            {
-              "not": {
-                "required": [
-                  "dataset"
-                ]
-              },
-              "required": [
-                "real_dataset",
-                "imag_dataset"
-              ]
-            }
-          ],
+          "$ref": "#/$defs/array",
           "properties": {
             "axes": {
               "enum": [
                 "time"
               ]
             },
-            "dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
             "dtype": {
               "enum": [
                 "float32",
-                "float64",
-                "complex64",
-                "complex128",
-                "bool",
-                "uint8",
-                "int64"
+                "float64"
               ]
-            },
-            "imag_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "real_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "shape": {
-              "items": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "minItems": 1,
-              "type": "array"
             },
             "units": {
-              "type": "string"
+              "const": "s"
             }
-          },
-          "required": [
-            "axes",
-            "shape",
-            "dtype",
-            "units"
-          ],
-          "type": "object"
+          }
         },
         "tx_xy_m": {
-          "additionalProperties": false,
-          "oneOf": [
-            {
-              "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "real_dataset"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "imag_dataset"
-                    ]
-                  }
-                ]
-              },
-              "required": [
-                "dataset"
-              ]
-            },
-            {
-              "not": {
-                "required": [
-                  "dataset"
-                ]
-              },
-              "required": [
-                "real_dataset",
-                "imag_dataset"
-              ]
-            }
-          ],
+          "$ref": "#/$defs/array",
           "properties": {
             "axes": {
               "enum": [
                 "tx,xy"
               ]
             },
-            "dataset": {
-              "pattern": "^/",
-              "type": "string"
+            "dtype": {
+              "enum": [
+                "float32",
+                "float64"
+              ]
+            },
+            "units": {
+              "const": "m"
+            }
+          }
+        },
+        "rx_xy_m": {
+          "$ref": "#/$defs/array",
+          "properties": {
+            "axes": {
+              "enum": [
+                "rx,xy"
+              ]
             },
             "dtype": {
               "enum": [
                 "float32",
-                "float64",
-                "complex64",
-                "complex128",
-                "bool",
-                "uint8",
-                "int64"
+                "float64"
               ]
             },
-            "imag_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "real_dataset": {
-              "pattern": "^/",
-              "type": "string"
-            },
-            "shape": {
-              "items": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
             "units": {
-              "type": "string"
+              "const": "m"
             }
-          },
-          "required": [
-            "axes",
-            "shape",
-            "dtype",
-            "units"
-          ],
-          "type": "object"
+          }
         }
-      },
-      "required": [
-        "pressure",
-        "rx_xy_m",
-        "time_s",
-        "tx_xy_m"
-      ],
-      "type": "object"
-    },
-    "arrays_file": {
-      "pattern": "^[^/\\\\]+$",
-      "type": "string"
-    },
-    "arrays_sha256": {
-      "pattern": "^[a-f0-9]{64}$",
-      "type": "string"
-    },
-    "metadata": {
-      "type": "object"
-    },
-    "schema": {
-      "const": "wust.rf"
-    },
-    "schema_version": {
-      "const": 1,
-      "type": "integer"
+      }
     }
-  },
-  "required": [
-    "schema",
-    "schema_version",
-    "metadata",
-    "arrays_file",
-    "arrays_sha256",
-    "arrays"
-  ],
-  "type": "object"
+  }
 }

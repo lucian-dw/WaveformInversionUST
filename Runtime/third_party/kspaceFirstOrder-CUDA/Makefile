@@ -103,8 +103,6 @@ SZIP_DIR = $(EBROOTSZIP)
 #CPU_ARCH = AVX512
 
 ############################### Common flags ###################################
-# Git hash of release 1.3
-GIT_HASH       = -D__KWAVE_GIT_HASH__=\"468dc31c2842a7df5f2a07c3a13c16c9b0b2b770\"
 
 # Replace tabs by spaces
 .RECIPEPREFIX += 
@@ -189,7 +187,6 @@ ifeq ($(COMPILER), GNU)
   CXXFLAGS  = -Xcompiler="$(CPU_FLAGS) $(CPU_OPT) $(OPENMP)  \
                           $(CPU_DEBUG) $(PROFILE) $(WARNING)"\
               $(GPU_OPT) $(CPP_STD) $(GPU_DEBUG) \
-              $(GIT_HASH)                        \
               $(INCLUDES)                        \
               --device-c --restrict
 
@@ -252,7 +249,6 @@ ifeq ($(COMPILER), Intel)
   CXXFLAGS  = -Xcompiler="$(CPU_FLAGS) $(CPU_OPT) $(OPENMP)   \
                           $(CPU_DEBUG) $(PROFILE) $(WARNING)" \
               $(GPU_OPT) $(CPP_STD) $(GPU_DEBUG) \
-              $(GIT_HASH)                        \
               $(INCLUDES)                        \
               --device-c --restrict -ccbin=icpc
 

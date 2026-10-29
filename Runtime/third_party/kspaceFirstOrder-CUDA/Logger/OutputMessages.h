@@ -62,8 +62,6 @@ OutputMessage kOutFmtKWaveVersion
   = "kspaceFirstOrder-CUDA v1.3";
 
 /// Output message.
-OutputMessage kOutFmtGitHashLeft
-  = kOutFmtVerticalLine + " Git hash:            %s " + kOutFmtEol;
 
 /// Output message.
 OutputMessage kOutFmtNumberOfThreads
@@ -218,8 +216,6 @@ OutputMessage kOutFmtCopySensorMask
 
 //------------------------------------------------ Print code version ------------------------------------------------//
 /// Print version output message.
-OutputMessage kOutFmtVersionGitHash
-  = kOutFmtVerticalLine + " Git hash:         %s    " + kOutFmtEol;
 
 /// Print version output message.
 OutputMessage kOutFmtLinuxBuild

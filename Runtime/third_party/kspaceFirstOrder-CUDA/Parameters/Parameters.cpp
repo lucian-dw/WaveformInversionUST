@@ -671,19 +671,6 @@ void Parameters::writeScalarsToOutputFile()
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
- * Get GitHash of the code
- */
-string Parameters::getGitHash() const
-{
-#if (defined (__KWAVE_GIT_HASH__))
-  return string(__KWAVE_GIT_HASH__);
-#else
-  return "";
-#endif
-}// end of getGitHash
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
  * Select a device device for execution.
  */
 void Parameters::selectDevice()
