@@ -33,3 +33,7 @@ The former Runtime/native/validate_native.py is preserved at the same relative
 path in the sibling research_archive/WaveformInversionUST tree. It is a full-size
 performance/research campaign; current hardware correctness uses
 Runtime/tests/test_native_pipeline.m with explicit device and asymmetric TX/RX.
+
+The P1-P6 and F01-F22 unit-by-unit progress record is preserved in the local
+archive at `docs/final_refactor_progress.md`. Current interfaces remain in the
+user docs; final acceptance commands/results are in [validation](validation.md).

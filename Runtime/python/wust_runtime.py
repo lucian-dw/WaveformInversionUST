@@ -15,7 +15,6 @@ from contracts import (
     PROTOCOL_VERSION,
     SCHEMAS,
     number,
-    schema,
     validate_request,
 )
 from process import execute

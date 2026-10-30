@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "Runtime/python"))
 import contracts
 import process
 import wust_runtime as runtime
-from wust_io import atomic_json, read_artifact, read_json, publish_result
+from wust_io import atomic_json, publish_result, read_artifact, read_json
 
 
 def process_states():
@@ -141,6 +141,21 @@ class ContractTests(unittest.TestCase):
     def test_artifact_roundtrip_and_axis_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
+            for i, residual in enumerate(
+                ([], None, {"absolute": 0.5, "relative": None})
+            ):
+                path = folder / f"result_{i}.json"
+                publish_result(
+                    path,
+                    "wust.reconstruction",
+                    {"final_data_residual": residual},
+                    {"c_mps": np.full((2, 3), 1500.0)},
+                    {"c_mps": "y,x"},
+                    {"c_mps": "m/s"},
+                )
+                decoded, _ = read_artifact(path)
+                expected = None if residual == [] else residual
+                self.assertEqual(decoded["metadata"]["final_data_residual"], expected)
             fixture(folder)
             doc, a = read_artifact(folder / "input.json")
             self.assertEqual(a["pressure"].shape, (3, 2, 4))

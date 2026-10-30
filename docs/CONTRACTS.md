@@ -81,7 +81,7 @@ A null/omitted schedule means each canonical frequency once. The complete Hz pla
 is resolved first, then truncated by max_updates. Every entry is one model update.
 Each loss belongs to the **pre-update model at that entry's frequency**.
 A final-model residual is null by default. Explicit
-`evaluate_final_residual: true` evaluates it at the last executed frequency
+`evaluate_final_residual: true` evaluates it across all canonical input frequencies
 and records additional oracle/RHS counts and time separately. Zero observation
 energy yields a null relative residual with `zero_observation_energy` status;
 the absolute residual is still reported.

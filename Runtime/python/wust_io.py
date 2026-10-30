@@ -40,6 +40,12 @@ def read_manifest(path, expected=None):
     exact_keys(doc, {"schema", "schema_version", "metadata", "arrays_file", "arrays"})
     if not isinstance(doc["metadata"], dict):
         raise ValueError("metadata must be an object")  # noqa: TRY004
+    if (
+        doc["schema"] == "wust.reconstruction"
+        and doc["metadata"].get("final_data_residual") == []
+    ):
+        # MATLAB [] means no requested final evaluation, not a residual array.
+        doc["metadata"]["final_data_residual"] = None
     fields = FIELDS[doc["schema"]]
     exact_keys(
         doc["arrays"],

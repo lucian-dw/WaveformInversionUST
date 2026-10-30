@@ -1,4 +1,4 @@
-# P1-P6 refactor
+# Refactor changelog
 
 - Protocol **2** uses JSON field descriptions and HDF5 arrays. Field definitions
   are maintained once and exported to seven schemas. Arrays precede successful
@@ -21,4 +21,19 @@ uses slowness NCG, source-projected pressure loss and the exact mass derivative;
 budget/schedule completion does not assert numerical convergence.
 
 See [Runtime API](docs/RUNTIME_API.md), [numerics](docs/CONTRACTS.md),
-[deployment](Runtime/README.md) and [execution record](docs/refactor_progress.md).
+[deployment](Runtime/README.md) and [execution record](docs/validation.md).
+
+## Final numerical and lifecycle consolidation
+
+- ROI filtering is MFMg. Clipped PR/FR uses preconditioned g*z inner products,
+  restarts on frequency changes/non-descent, and projects in full slowness.
+- Frozen-source curvature is a named mathematical step. One oracle starts each
+  update; optional final residual evaluation records its own work.
+- CPU reuses decomposition(H,'lu') for forward/adjoint source batches. CPU/GPU
+  share nine-point coefficients. LDR9 returns dq/ds directly.
+- Removed the unused CUDA factors branch and four unused kernels, retained the
+  execution recurrences, and widened global address products to size_t.
+- Native Makefile default/recipes and the eight-plan FFT shutdown chain are
+  repaired. Third-party changes remain limited to those functional dependencies.
+- Maintained MATLAB code is multiline. Array fields remain defined once in
+  contracts.FIELDS; Python codecs publish arrays before the manifest.

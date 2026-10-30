@@ -14,7 +14,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Runtime/python"))
 from process import execute
-from wust_io import read_artifact, publish_result
+from wust_io import publish_result, read_artifact
 from wust_runtime import quote, run
 
 
@@ -174,6 +174,7 @@ def check_reconstruction(metadata, speed, *, backend, expected_updates=2):
     assert metadata["completed_updates"] == expected_updates
     assert metadata["planned_schedule_length"] == 3
     assert metadata["completion"]["converged"] is False
+    assert metadata["final_data_residual"] is None
     assert metadata["completion"]["reason"] == "caller_truncated_schedule"
     records = metadata["records"]
     assert len(records) == expected_updates

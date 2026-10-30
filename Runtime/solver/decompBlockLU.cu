@@ -13,16 +13,15 @@
  *     invTcurr(2:end-1,2:end-1) = inv(T(2:end-1,2:end-1));
  *     invT(:,:,j-1) = invTcurr;
  *     D = diag(Dd(:,j)) + diag(Dl(:,j),-1) + diag(Du(:,j),1);
- *     T = D - triDiagMultLeftGPUmex(Ld(:,j-1), Ll(:,j-1), Lu(:,j-1), ...
- *         triDiagMultRight(invT(:,:,j-1), Ud(:,j-1).', Ul(:,j-1).', Uu(:,j-1).'));
+ *     L = diag(Ld(:,j-1)) + diag(Ll(:,j-1),-1) + diag(Lu(:,j-1),1);
+ *     U = diag(Ud(:,j-1)) + diag(Ul(:,j-1),-1) + diag(Uu(:,j-1),1);
+ *     T = D - L * invT(:,:,j-1) * U;
  * end
  * invT(:,:,Nx) = invInterior(T);
  * clearvars T D invTcurr; % Remove last T and invTcurr from memory
  *
- * See the separate triDiagMultRight.m and triDiagMultLeftGPUmex.cu file
- * for additional details regarding the algorithm above. Although neither
- * triDiagMultRight.m nor triDiagMultLeftGPUmex.cu are used in
- * this MEX file, key components of those algorithms were used here.
+ * schurUpdateFused evaluates the tridiagonal products directly. Each interior
+ * Schur block is pivot-factorized and applied to identity pages below.
  */
 
 #include "mex.h"
