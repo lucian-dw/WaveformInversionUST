@@ -212,3 +212,16 @@ has been performed as part of this refactor.
 - A100 `make -B -j4` with CUDA 11.4/HDF5 and default target: compiled and linked
   successfully. This is build evidence, not the later native runtime gate.
 - Next: F02-F06 data/discretization repairs, then F07 WUST update definitions.
+
+## Final taskbook F07
+
+- ROI gradient is M F M g; clipped preconditioned PR/FR uses g'*z, frequency
+  restart and the true slope. Slowness trials are projected before reciprocals.
+- Positive observation energy has no epsilon floor; zero energy records null
+  relative residual, zero_observation_energy and the absolute residual.
+- A100 MATLAB R2021b `test_runtime('cpu')`: passed, including exterior-gradient
+  invariance, descent/restart rules, cross-zero projection and zero-data record.
+  Continuum gradient FD relative error 3.46637e-10; LDR9 1.97022e-10.
+  Four-update fixture loss 3.88345e-17 -> 8.95907e-18. This CPU gate does not
+  substitute for the final GPU/native and two-repository integration gates.
+- Next: BenchLab F08-F11, then WUST F12 formula/lifecycle consolidation.

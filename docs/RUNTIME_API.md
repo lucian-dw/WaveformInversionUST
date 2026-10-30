@@ -104,6 +104,15 @@ RF `prepare` requests pass the explicit `grid` unchanged to `wust_prepare`.
 Derived coordinates are not additional configuration fields. The public path
 can be checked independently of reconstruction with
 `python Runtime/tests/integration_runtime.py --matlab /path/to/matlab --out /tmp/wust-rf-check --prepare-only`.
+
+Reconstruction masks the raw slowness gradient both before and after spatial
+filtering (`M F M g`). The NCG direction uses preconditioned clipped PR/FR
+inner products and restarts on a frequency change or non-descent direction.
+Trials are projected in slowness to the joint global and per-step speed bounds
+before taking the reciprocal. Each record reports the absolute pre-update
+pressure residual. Its relative residual is unavailable (`null`, status
+`zero_observation_energy`) when observations have zero energy, not divided by
+an arbitrary epsilon floor. Schedule completion is not a convergence claim.
 Canonical measurements have `Y[tx,rx,frequency]`, matching mask, strictly sorted
 frequencies, physical positions and one-based sampling indices. Derived grid
 coordinates are computed from grid, not stored as duplicate protocol arrays.

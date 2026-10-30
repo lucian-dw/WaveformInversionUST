@@ -24,6 +24,7 @@ cfg = struct('backend', backend, 'pml_m', .004, 'pml_strength', 10, ...
     'frequency_schedule_hz', [1e5,1e5,1.2e5,1.2e5], 'update_mask', true(size(sound_speed)));
 cfg.update_mask([1:5,end-4:end], :) = false;
 cfg.update_mask(:, [1:5,end-4:end]) = false;
+check_update_rules(x, cfg);
 options = struct('backend', backend, 'stencil_bounds', cfg.stencil_bounds);
 solver = HelmholtzSolver(x, x, sound_speed, zeros(size(sound_speed)), ...
     1e5, -1, 10, .004, options);
@@ -68,6 +69,17 @@ zero.max_updates = 0;
 result = wust_reconstruct(obs, initial, zero);
 assert(isequal(result.c_mps,initial) && isempty(result.records));
 assert(result.completed_updates == 0);
+zero_data = obs;
+zero_data.Y(:) = 0;
+zero_run = cfg;
+zero_run.max_updates = 1;
+result = wust_reconstruct(zero_data, initial, zero_run);
+assert(isequal(result.c_mps, initial));
+assert(result.records.alpha == 0 && result.records.absolute_residual_before_update == 0);
+assert(isnan(result.records.relative_residual_before_update));
+assert(strcmp(result.records.relative_residual_status, 'zero_observation_energy'));
+encoded = jsonencode(result.records);
+assert(contains(encoded, '"relative_residual_before_update":null'));
 default = rmfield(cfg, 'frequency_schedule_hz');
 result = wust_reconstruct(obs, initial, default);
 assert(result.planned_schedule_length == 2);
@@ -83,6 +95,28 @@ cfg.wavenumber = 'kwave-ldr9';
 cfg.dispersion = struct('time_step_s',2e-8, ...
     'reference_speed_mps',1700,'model_reference_speed_mps',1500);
 check_derivative(initial, obs, cfg, direction, step, tolerance);
+end
+
+function check_update_rules(x, cfg)
+mask = cfg.update_mask;
+g = ones(size(mask));
+g(~mask) = -1e10;
+[roi, z] = wust_roi_gradient(g, mask, x, x, 1500, 1e5, .5, 4);
+g(~mask) = 1e20;
+[~, changed] = wust_roi_gradient(g, mask, x, x, 1500, 1e5, .5, 4);
+assert(isequal(z, changed) && all(z(~mask) == 0));
+assert(sum(roi(:).*(-z(:))) < 0, 'Masked filtered direction must descend');
+[d, beta, gz] = wust_ncg_direction([1;2], [2;1], [1;.5], 1.5, [-1;-2], true);
+assert(abs(beta-4/3) < 1e-14 && gz == 4 && sum([1;2].*d) < 0);
+[d, beta] = wust_ncg_direction([1;2], [2;1], [1;.5], 1.5, [100;100], true);
+assert(beta == 0 && isequal(d, [-2;-1]));
+[~, beta] = wust_ncg_direction([1;2], [2;1], [1;.5], 1.5, [-1;-2], false);
+assert(beta == 0);
+initial = 1500*ones(size(mask));
+crossing = -ones(size(mask));
+updated = wust_project_slowness_update(initial, crossing, 1, cfg);
+assert(all(updated(mask) == 1512) && isequal(updated(~mask), initial(~mask)));
+assert(all(isfinite(updated(:)) & updated(:) > 0));
 end
 
 function check_derivative(initial, obs, cfg, direction, step, tolerance)

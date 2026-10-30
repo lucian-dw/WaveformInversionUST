@@ -12,32 +12,20 @@ if cfg.save_history
     history(:, :, 1) = c;
 end
 records = struct([]);
-previous = zeros(size(c));
-direction = previous;
+prev_z = zeros(size(c));
+prev_gz = 0;
+direction = prev_z;
 last = 0;
 for step = 1:n
     fi = cfg.schedule(step);
     stepTimer = tic;
     [loss, g, state] = wust_oracle(c, obs, fi, cfg);
-    rawg = g;
-    if cfg.filter_cutoff > 0
-        g = ringingRemovalFilt(obs.x_m, obs.y_m, g, mean(initial(:)), ...
-            obs.frequencies_hz(fi), cfg.filter_cutoff, cfg.filter_order);
-    end
-    g(~mask) = 0;
-    beta = 0;
-    den = sum(previous(:).^2);
-    if fi == last && den > 0
-        beta = min(max(sum(g(:).*(g(:) - previous(:)))/den, 0), ...
-            sum(g(:).^2)/den);
-    end
-    direction = beta*direction - g;
-    direction(~mask) = 0;
-    if sum(rawg(:).*direction(:)) >= 0
-        direction = -g;
-        beta = 0;
-    end
-    previous = g;
+    [roi_gradient, z] = wust_roi_gradient(g, mask, obs.x_m, obs.y_m, ...
+        mean(initial(:)), obs.frequencies_hz(fi), cfg.filter_cutoff, cfg.filter_order);
+    [direction, beta, gz] = wust_ncg_direction(roi_gradient, z, prev_z, ...
+        prev_gz, direction, fi == last);
+    prev_z = z;
+    prev_gz = gz;
     last = fi;
 
     % Linearized pressure curvature, using the same masked source scales.
@@ -70,24 +58,25 @@ for step = 1:n
     assert(denom > 0 || all(direction(:) == 0), ...
         'WUST:NumericalFailure', 'Zero curvature with nonzero update direction');
     if denom > 0
-        alpha = max(0, -sum(rawg(:).*direction(:))/denom);
+        alpha = max(0, -sum(roi_gradient(:).*direction(:))/denom);
     end
-    candidate = 1./(1./c + cfg.step_damping*alpha*double(direction));
-    assert(all(isfinite(candidate(:)) & candidate(:) > 0), ...
-        'WUST:NumericalFailure', ...
-        'Invalid candidate; refusing to silently replace it with the old model');
-
     oldSlowness = 1./c;
-    delta = max(-cfg.max_update_mps, min(cfg.max_update_mps, candidate - c));
-    candidate = max(cfg.bounds_mps(1), min(cfg.bounds_mps(2), c + delta));
-    candidate(~mask) = c(~mask);
-    c = candidate;
+    c = wust_project_slowness_update(c, double(direction), alpha, cfg);
     if cfg.save_history
         history(:, :, step + 1) = single(c);
     end
+    absolute_residual = sqrt(2*loss);
+    relative_residual = NaN;
+    residual_status = 'zero_observation_energy';
+    if state.data_norm > 0
+        relative_residual = absolute_residual/sqrt(state.data_norm);
+        residual_status = 'available';
+    end
     record = struct('step', step, 'frequency_hz', obs.frequencies_hz(fi), ...
         'loss_before_update', loss, ...
-        'relative_residual_before_update', sqrt(2*loss/max(state.data_norm, eps)), ...
+        'absolute_residual_before_update', absolute_residual, ...
+        'relative_residual_before_update', relative_residual, ...
+        'relative_residual_status', residual_status, ...
         'alpha', alpha, 'beta', beta, 'wall_seconds', toc(stepTimer), ...
         'assembly_factor_seconds', state.factor_seconds, ...
         'forward_seconds', state.forward_seconds, ...
