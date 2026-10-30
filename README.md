@@ -8,7 +8,7 @@ WUST reconstructs a sound-speed map from complex pressure measurements, acquisit
 
 The repository serves two integration paths: MATLAB functions for numerical development, and a Python JSON/HDF5 interface for scripts, benchmark systems and agents. [usct-benchlab](https://github.com/lucian-dw/usct-benchlab) connects to this runtime through its `fwi_wust` algorithm; WUST also runs as a standalone project.
 
-**Start here:** [Repository map](#repository-map) · [Run a reconstruction](#run-a-reconstruction) · [Python and MATLAB interfaces](#python-and-matlab-interfaces) · [Data and results](#data-and-results) · [Development](#development)
+**Start here:** [Repository map](#repository-map) · [Run a reconstruction](#run-a-reconstruction) · [Python and MATLAB interfaces](#python-and-matlab-interfaces) · [Data and results](#data-and-results) · [Tests](#tests)
 
 ## Numerical model and capabilities
 
@@ -44,9 +44,9 @@ The objective, stencil derivative and update formulas are documented in [Numeric
 | `Runtime/schemas/` | JSON schemas for requests and array artifacts | [wust.request.json](Runtime/schemas/wust.request.json) |
 | `Runtime/native/` | Native k-Wave simulation launcher and source batching | [Deployment guide](Runtime/README.md) |
 | `Runtime/third_party/` | Bundled k-Wave CUDA source and its license | [k-Wave CUDA](Runtime/third_party/kspaceFirstOrder-CUDA/) |
-| `Runtime/tests/` | Python protocol tests and MATLAB numerical checks | [Validation guide](docs/validation.md) |
+| `Runtime/tests/` | Python protocol tests and MATLAB numerical checks | [Test entry points](Runtime/tests/) |
 | `examples/` | Simulation, RF preparation and reconstruction workflow | [simulate_and_reconstruct.m](examples/simulate_and_reconstruct.m) |
-| `docs/` | Numerical definitions, protocol and development references | [Runtime API](docs/RUNTIME_API.md), [中文流程说明](docs/PIPELINE_ZH.md) |
+| `docs/` | Numerical definitions, protocol and usage references | [Runtime API](docs/RUNTIME_API.md), [中文流程说明](docs/PIPELINE_ZH.md) |
 
 For a numerical reading path, start with `wust_reconstruct.m`, follow its loss and gradient call into `wust_oracle.m`, then read `HelmholtzSolver.m` for the discrete wave equation. For an integration reading path, start with `wust_runtime.py` and the request fields in `contracts.py`.
 
@@ -240,22 +240,11 @@ BenchLab uses `[y,x]` position columns and `[frequency,tx,rx]` pressure. Its ada
 
 Each update record reports the loss and residual at the model **before that update**, for its scheduled frequency. Set `config.evaluate_final_residual: true` to evaluate the final model over all canonical frequencies; the result includes the associated work and time. The default `final_data_residual` is `null`.
 
-## Development
+## Tests
 
-Use the following entry points for focused changes:
-
-| Development task | Files to read and extend |
-| --- | --- |
-| Add or change observation preparation | `wust_prepare.m`, `wust_prepare_observations.m`, `wust_geometry.m` |
-| Change the objective or gradient | `wust_oracle.m`, `directional_curvature.m` |
-| Change model updates | `wust_reconstruct.m`, `wust_ncg_direction.m`, `wust_roi_gradient.m`, `wust_project_slowness_update.m` |
-| Change wave discretization or backend | `HelmholtzSolver.m`, `ninePointCoefficients.m`, CUDA MEX sources |
-| Extend protocol operations or fields | `Runtime/python/contracts.py`, Python/MATLAB consumers and generated schemas |
-
-Read [AGENTS.md](AGENTS.md) for project development conventions. Match each numerical change with its relevant gradient, solver or end-to-end reference. Generate schemas after protocol changes:
+Run the Python protocol tests:
 
 ```bash
-python Runtime/python/export_schemas.py
 python -m unittest discover -s Runtime/tests -p 'test_*.py'
 ```
 
@@ -268,7 +257,14 @@ test_ingest_frequency;
 test_resampling;
 ```
 
-After building CUDA MEX, `test_runtime('gpu')` exercises the GPU path. The [validation guide](docs/validation.md) provides the public file-based integration command. The [simulation example](examples/simulate_and_reconstruct.m) covers simulation, RF preparation and reconstruction.
+After building CUDA MEX, `test_runtime('gpu')` exercises the GPU path. For the public file-based integration, run:
+
+```bash
+python Runtime/tests/integration_runtime.py --matlab /path/to/matlab \
+  --backend cpu --out /absolute/new/integration-check
+```
+
+The [simulation example](examples/simulate_and_reconstruct.m) covers simulation, RF preparation and reconstruction.
 
 ## Documentation, license and citation
 

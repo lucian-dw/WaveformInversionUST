@@ -17,9 +17,6 @@ Active reconstruction in this fork is sound-speed-only.
 - Native k-Wave source batching with separate physical and batch dimensions, checked HDF5 storage and resource ownership.
 - Independent JSON/HDF5 runtime API; no dependency on BenchLab or diffusion packages.
 
-Historical upstream examples and migration records are listed in
-[the research index](docs/research_index.md). They are not another runtime backend.
-
 ## Third-party k-Wave CUDA source
 
 `Runtime/third_party/kspaceFirstOrder-CUDA` is **LGPL-3.0-or-later**, not MIT.

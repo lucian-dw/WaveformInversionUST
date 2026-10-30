@@ -8,7 +8,7 @@ WUST 根据复数声压观测、采集几何和初始模型重建声速图，将
 
 仓库提供两条接入路径：MATLAB 函数服务数值算法开发，Python JSON/HDF5 接口服务脚本、基准评测和 agent。[usct-benchlab](https://github.com/lucian-dw/usct-benchlab) 通过 `fwi_wust` 算法调用本运行时；WUST 也支持独立部署和运行。
 
-**快速导航：**[仓库结构](#仓库结构) · [运行一次重建](#运行一次重建) · [Python-与-MATLAB-接口](#python-与-matlab-接口) · [数据与结果](#数据与结果) · [开发入口](#开发入口)
+**快速导航：**[仓库结构](#仓库结构) · [运行一次重建](#运行一次重建) · [Python-与-MATLAB-接口](#python-与-matlab-接口) · [数据与结果](#数据与结果) · [测试](#测试)
 
 ## 数值模型与功能
 
@@ -44,9 +44,9 @@ $$
 | `Runtime/schemas/` | 请求与数组文件的 JSON schema | [wust.request.json](Runtime/schemas/wust.request.json) |
 | `Runtime/native/` | 原生 k-Wave 仿真启动器与源分批计算 | [部署指南](Runtime/README.md) |
 | `Runtime/third_party/` | 随仓提供的 k-Wave CUDA 源码及许可证 | [k-Wave CUDA](Runtime/third_party/kspaceFirstOrder-CUDA/) |
-| `Runtime/tests/` | Python 协议测试与 MATLAB 数值验证 | [验证指南](docs/validation.md) |
+| `Runtime/tests/` | Python 协议测试与 MATLAB 数值验证 | [测试入口](Runtime/tests/) |
 | `examples/` | 仿真、RF 准备与重建示例 | [simulate_and_reconstruct.m](examples/simulate_and_reconstruct.m) |
-| `docs/` | 数值定义、协议与开发参考 | [运行时 API](docs/RUNTIME_API.md)、[中文流程说明](docs/PIPELINE_ZH.md) |
+| `docs/` | 数值定义、协议与使用参考 | [运行时 API](docs/RUNTIME_API.md)、[中文流程说明](docs/PIPELINE_ZH.md) |
 
 阅读数值主线时，从 `wust_reconstruct.m` 进入，沿目标与梯度调用阅读 `wust_oracle.m`，再通过 `HelmholtzSolver.m` 理解离散波动方程。接入外部系统时，从 `wust_runtime.py` 和 `contracts.py` 中的请求字段开始。
 
@@ -240,22 +240,11 @@ BenchLab 使用 `[y,x]` 坐标列和 `[frequency,tx,rx]` 声压布局。其适�
 
 每条迭代记录对应计划中该频率在**本次更新前**的模型目标值和残差。设置 `config.evaluate_final_residual: true`，可以在全部规范频率上评价最终模型，并获得对应计算量与耗时。默认的 `final_data_residual` 为 `null`。
 
-## 开发入口
+## 测试
 
-按开发任务定位相应实现：
-
-| 开发任务 | 阅读与扩展位置 |
-| --- | --- |
-| 增加或修改观测准备 | `wust_prepare.m`、`wust_prepare_observations.m`、`wust_geometry.m` |
-| 修改目标函数或梯度 | `wust_oracle.m`、`directional_curvature.m` |
-| 修改模型更新 | `wust_reconstruct.m`、`wust_ncg_direction.m`、`wust_roi_gradient.m`、`wust_project_slowness_update.m` |
-| 修改传播离散或后端 | `HelmholtzSolver.m`、`ninePointCoefficients.m`、CUDA MEX 源码 |
-| 扩展协议操作或字段 | `Runtime/python/contracts.py`、Python/MATLAB 调用方和生成的 schema |
-
-[AGENTS.md](AGENTS.md) 说明项目开发约定。每项数值修改配套对应的梯度、求解器或端到端参考验证。协议修改后生成 schema：
+运行 Python 协议测试：
 
 ```bash
-python Runtime/python/export_schemas.py
 python -m unittest discover -s Runtime/tests -p 'test_*.py'
 ```
 
@@ -268,7 +257,14 @@ test_ingest_frequency;
 test_resampling;
 ```
 
-编译 CUDA MEX 后，使用 `test_runtime('gpu')` 验证 GPU 路径。[验证指南](docs/validation.md) 提供公开文件接口的集成命令，[仿真示例](examples/simulate_and_reconstruct.m) 展示仿真、RF 准备与重建的完整流程。
+编译 CUDA MEX 后，使用 `test_runtime('gpu')` 验证 GPU 路径。公开文件接口的集成命令为：
+
+```bash
+python Runtime/tests/integration_runtime.py --matlab /path/to/matlab \
+  --backend cpu --out /absolute/new/integration-check
+```
+
+[仿真示例](examples/simulate_and_reconstruct.m) 展示仿真、RF 准备与重建的完整流程。
 
 ## 文档、许可证与引用
 

@@ -34,7 +34,6 @@ supported.
     +--OutputStreams - Output streams for sampling data
     +--Parameters    - Parameters of the simulation
     +--Utils         - Utility routines
-    Changelog.md     - Change log
     License.md       - License file
     Makefile         - GNU Makefile
     Readme.md        - Read me

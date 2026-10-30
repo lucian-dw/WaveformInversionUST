@@ -42,5 +42,4 @@ native-batch 仿真中每个 TX 是独立场，TX/RX 不必相同；设备与批
 计划结束不是收敛。超时由外层回收所属进程组，不伪造最终图像；未计算的最终残差由 producer 写成 JSON null。
 fixture 生成和正式重建分别计时，CPU、GPU、native 验收各自记录。
 
-[部署](../Runtime/README.md) · [协议示例](RUNTIME_API.md) ·
-[历史研究](research_index.md)
+[部署](../Runtime/README.md) · [协议示例](RUNTIME_API.md)
