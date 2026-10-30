@@ -2,37 +2,12 @@
  * This MEX file uses the mxGPUArray API with CUDA and CUBLAS to apply
  * the block LU decomposition of the 9-point Helmholtz equation.
  *
- * This was initially implemented in MATLAB using the following code:
- *
- * % Test if Block LU Decomposition Works
- * SRC = gpuArray(single(SRC));
- * u = complex(zeros(Ny, Nx, num_sources, 'single', 'gpuArray'));
- * if adjHelmholtzEqn
- *     % Apply to Adjoint Helmholtz Solve
- *     for j = 2:Nx % Forward Pass
- *         u(:,j,:) = SRC(:,j,:) - triDiagMultLeftGPUmex(conj(Ud(:,j-1)), ...
- *             conj(Uu(:,j-1)), conj(Ul(:,j-1)), pagemtimes(invT(:,:,j-1)', u(:,j-1,:)));
- *     end; SRC = gather(SRC);
- *     for j = Nx-1:-1:1 % Backward Pass
- *         u(:,j,:) = pagemtimes(invT(:,:,j)', u(:,j,:) - ...
- *             triDiagMultLeftGPUmex(conj(Ld(:,j)), ...
- *             conj(Lu(:,j)), conj(Ll(:,j)), u(:,j+1,:)));
- *     end; u = gather(u);
- * else
- *     % Apply to Forward Helmholtz Solve
- *     for j = 2:Nx % Forward Pass
- *         u(:,j,:) = pagemtimes(invT(:,:,j), (SRC(:,j,:) - ...
- *             triDiagMultLeftGPUmex(Ld(:,j-1), Ll(:,j-1), Lu(:,j-1), u(:,j-1,:))));
- *     end; SRC = gather(SRC);
- *     for j = Nx-1:-1:1 % Backward Pass
- *         u(:,j,:) = u(:,j,:) - pagemtimes(invT(:,:,j), ...
- *             triDiagMultLeftGPUmex(Ud(:,j), Ul(:,j), Uu(:,j), u(:,j+1,:)));
- *     end; u = gather(u);
- * end
- *
- * See the separate triDiagMultLeftGPUmex.cu file for additional details
- * regarding the algorithm above. Although triDiagMultLeftGPUmex.cu is not
- * used in this MEX file, key components of that algorithm were used here.
+ * Inputs are complex-single GPU RHS pages [Ny,Nx,Nsrc], six tridiagonal
+ * off-diagonal blocks and inverse Schur pages [Ny,Ny,Nx], plus an adjoint flag.
+ * Forward elimination applies invT_j*(SRC_j-L_j*u_{j-1}); backward
+ * substitution removes invT_j*U_j*u_{j+1}. The adjoint reverses/transposes
+ * these block factors. RHS sampling belongs to interior grid points only;
+ * the outer Dirichlet degrees of freedom remain zero.
  */
 
 #include "mex.h"
@@ -364,7 +339,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
         !(mxIsGPUArray(prhs[7])) ||
         !(mxIsLogicalScalar(prhs[8])) ) {
         wustFail("WUST:InvalidInput",
-                          "Invalid input to triDiagMultLeftGPUmex: Inputs 1-8 should be gpuArray. Input 9 should be a boolean.");
+                          "applyBlockLU inputs 1-8 must be gpuArray; input 9 must be a logical scalar.");
     }
 
     /* Assemble GPU Arrays from Inputs */
@@ -409,39 +384,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
         mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 ||
         mxGPUGetDimensions(Uu)[0] != Ny-1 || mxGPUGetDimensions(Uu)[1] != Nx-1 ||
         mxGPUGetDimensions(invT)[0] != Ny || mxGPUGetDimensions(invT)[1] != Ny || mxGPUGetDimensions(invT)[2] != Nx) {
-        printf("Ny = %d\n", Ny);
-        printf("Nx = %d\n", Nx);
-        printf("Number of Sources = %d\n", num_sources);
-        printf("Number of Rows in Ld = %d\n", (int)mxGPUGetDimensions(Ld)[0]);
-        printf("Number of Columns in Ld = %d\n", (int)mxGPUGetDimensions(Ld)[1]);
-        printf("Number of Rows in Ll = %d\n", (int)mxGPUGetDimensions(Ll)[0]);
-        printf("Number of Columns in Ll = %d\n", (int)mxGPUGetDimensions(Ll)[1]);
-        printf("Number of Rows in Lu = %d\n", (int)mxGPUGetDimensions(Lu)[0]);
-        printf("Number of Columns in Lu = %d\n", (int)mxGPUGetDimensions(Lu)[1]);
-        printf("Number of Rows in Ud = %d\n", (int)mxGPUGetDimensions(Ud)[0]);
-        printf("Number of Columns in Ud = %d\n", (int)mxGPUGetDimensions(Ud)[1]);
-        printf("Number of Rows in Ul = %d\n", (int)mxGPUGetDimensions(Ul)[0]);
-        printf("Number of Columns in Ul = %d\n", (int)mxGPUGetDimensions(Ul)[1]);
-        printf("Number of Rows in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[0]);
-        printf("Number of Columns in Uu = %d\n", (int)mxGPUGetDimensions(Uu)[1]);
-        printf("invT is %d x %d x %d\n", (int)mxGPUGetDimensions(invT)[0],
-                                         (int)mxGPUGetDimensions(invT)[1],
-                                         (int)mxGPUGetDimensions(invT)[2]);
-
         wustFail("WUST:InvalidInput", "Inconsistent Block-LU input shapes.");
-    }
-
-    /* Verify that each array is a single array before extracting the pointer. */
-    if (mxGPUGetClassID(SRC) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Ld) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Ll) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Lu) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Ud) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Ul) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(Uu) != mxSINGLE_CLASS ||
-        mxGPUGetClassID(invT) != mxSINGLE_CLASS) {
-        wustFail("WUST:InvalidInput",
-                          "Invalid input to triDiagMultLeftGPUmex: Inputs should all be single precision");
     }
 
     /*

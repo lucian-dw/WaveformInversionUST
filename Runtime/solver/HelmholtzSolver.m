@@ -2,31 +2,19 @@ classdef HelmholtzSolver
     % Nine-point Helmholtz/PML solve; arrays [row=y,col=x], positions m,
     % sound speed m/s, frequency Hz. Source RHS: [ny,nx,n_source].
     % CPU owns a sparse double matrix; GPU owns complex-single block inverses.
-    % options: backend, stencil_bounds, dispersion (empty for continuum).
+    % options require backend and fixed [min,max] stencil_bounds;
+    % optional dispersion is empty for continuum.
     % Created by Rehman Ali; maintained discrete mass derivative included.
 
     properties (SetAccess = private)
-        backend = 'cpu'
+        backend
     end
 
     properties
-        % 1) Inputs to Constructor
-        x % 1xN array of x grid positions
-        y % 1xM array of y grid positions
-        vel % MxN array of wave velocities [length/time]
-        atten % MxN array of attenuations [Neper/(length/time)]
-        f % Wave Frequency [1/time]
-        signConvention % -1 for exp(-ikr), +1 for exp(+ikr)
-        a0 % PML strength parameter from Chen/Cheng/Feng/Wu 2013 Paper
-        L_PML % Length [length] of PML
-        % 2) Computed During Constructor
         cpu_factor
         assembly_seconds
         factor_seconds
-        HelmholtzEqn % Sparse System of Equations for Helmholtz Equation
-        PML % PML factors over identity term of stencil
-        V % Complex Velocity [m/s] for Virtual Source Calculation
-        % 3) Computed During Constructor if strcmp(obj.backend, 'gpu')
+        % GPU block factors, retained until the last solve/curvature consumer.
         Ld % Ny x (Nx-1) gpuArray of main diagonals on lower block matrices
         Ll % (Ny-1) x (Nx-1) gpuArray of lower diagonals on lower block matrices
         Lu % (Ny-1) x (Nx-1) gpuArray of upper diagonals on lower block matrices
@@ -35,7 +23,6 @@ classdef HelmholtzSolver
         Uu % (Ny-1) x (Nx-1) gpuArray of upper diagonals on upper block matrices
         invT % Ny x Ny x Nx gpuArray of Schur Complement Inverses
         virtualSourceMultiplier
-        derivativeSlowness
         massD
         massE
     end
@@ -44,15 +31,13 @@ classdef HelmholtzSolver
 
         function obj = HelmholtzSolver(x, y, ...
                                        vel, atten, f, signConvention, a0, L_PML, options)
-            if nargin < 9
-                options = struct('backend', 'cpu', 'stencil_bounds', [], 'dispersion', []);
-            end
-            if ~isfield(options, 'backend')
-                options.backend = 'cpu';
-            end
-            if ~isfield(options, 'stencil_bounds')
-                options.stencil_bounds = [];
-            end
+            assert(nargin == 9 && isstruct(options) && ...
+                   all(isfield(options, {'backend', 'stencil_bounds'})), ...
+                   'WUST:InvalidInput', 'Explicit backend and fixed stencil_bounds are required');
+            bounds = options.stencil_bounds;
+            assert(isnumeric(bounds) && isreal(bounds) && numel(bounds) == 2 && ...
+                   all(isfinite(bounds)) && bounds(1) > 0 && bounds(2) > bounds(1), ...
+                   'WUST:InvalidInput', 'stencil_bounds must be a positive ordered [min,max] pair');
             if ~isfield(options, 'dispersion')
                 options.dispersion = [];
             end
@@ -67,15 +52,6 @@ classdef HelmholtzSolver
                    'WUST:InvalidInput', 'Uniform increasing grids required');
             assemblyTimer = tic;
             obj.backend = char(options.backend);
-            % First Set All Input Values to Constructor
-            obj.x = x;
-            obj.y = y;
-            obj.vel = vel;
-            obj.atten = atten;
-            obj.f = f;
-            obj.signConvention = signConvention;
-            obj.a0 = a0;
-            obj.L_PML = L_PML;
             % Extract Grid Information
             h = mean(diff(x)); % Grid Spacing in X [length]
             gh = mean(diff(y));
@@ -89,10 +65,10 @@ classdef HelmholtzSolver
 
             % Calculate Complex Sound Speed
             SI = atten / (2 * pi);
-            obj.V = 1 ./ (1 ./ vel + 1i * SI * sign(signConvention));
+            velocity = 1 ./ (1 ./ vel + 1i * SI * sign(signConvention));
 
             % Calculate Complex Wavenumber
-            k = (2 * pi * f ./ obj.V); % Wavenumber [1/m]
+            k = (2 * pi * f ./ velocity); % Wavenumber [1/m]
 
             % Generate Functions for PML
             xe = linspace(xmin, xmax, 2 * (Nx - 1) + 1);
@@ -117,30 +93,12 @@ classdef HelmholtzSolver
             lin_idx = @(x_idx, y_idx) y_idx + Ny * (x_idx - 1);
             val_idx = 1;
 
-            % Optional override for the stencil optimization range.
-            if ~isempty(options.stencil_bounds)
-                stencilVelBounds = options.stencil_bounds;
-                if isscalar(stencilVelBounds)
-                    vStencilMin = double(stencilVelBounds);
-                    vStencilMax = double(stencilVelBounds);
-                elseif numel(stencilVelBounds) == 2
-                    stencilVelBounds = double(stencilVelBounds(:));
-                    vStencilMin = stencilVelBounds(1);
-                    vStencilMax = stencilVelBounds(2);
-                else
-                    error('stencilVelBounds must be empty, scalar, or 2-element vector.');
-                end
-            else
-                vStencilMin = min(vel(:));
-                vStencilMax = max(vel(:));
-            end
-
             % Optimal Stencil Parameters
-            [b, d, e] = stencilOptParams(vStencilMin, vStencilMax, f, h, g);
+            [b, d, e] = stencilOptParams(double(bounds(1)), double(bounds(2)), f, h, g);
             % Fork: optional frozen k-Wave-aware dispersion; no inferred dt.
             obj.massD = d;
             obj.massE = e;
-            obj.derivativeSlowness = 8 * pi^2 * f^2 ./ obj.V;
+            derivativeSlowness = 8 * pi^2 * f^2 ./ velocity;
             if ~isempty(options.dispersion)
                 spec = options.dispersion;
                 assert(all(atten(:) == 0) && abs(g - 1) < 1e-10, ...
@@ -148,10 +106,9 @@ classdef HelmholtzSolver
                 [q, dq] = kwaveLdr9WavenumberSquared(vel, f, h, b, d, e, ...
                                                      spec.time_step_s, spec.reference_speed_mps);
                 k = sqrt(q);
-                obj.derivativeSlowness = dq;
+                derivativeSlowness = dq;
             end
 
-            obj.PML = C;
             [Dd, Dl, Du, Ld, Ll, Lu, Ud, Ul, Uu] = ...
                 ninePointCoefficients(A, B, C, k, b, d, e, h, g, Nx, Ny);
             if strcmp(obj.backend, 'cpu')
@@ -178,15 +135,16 @@ classdef HelmholtzSolver
                     end
                 end
                 used = 1:val_idx - 1;
-                obj.HelmholtzEqn = sparse(rows(used), cols(used), vals(used), Nx * Ny, Nx * Ny);
+                helmholtz = sparse(rows(used), cols(used), vals(used), Nx * Ny, Nx * Ny);
+                obj.virtualSourceMultiplier = C .* derivativeSlowness;
                 obj.assembly_seconds = toc(assemblyTimer);
                 factorTimer = tic;
-                obj.cpu_factor = decomposition(obj.HelmholtzEqn, 'lu');
+                obj.cpu_factor = decomposition(helmholtz, 'lu');
                 obj.factor_seconds = toc(factorTimer);
             end
             if strcmp(obj.backend, 'gpu')
                 obj.virtualSourceMultiplier = ...
-                    gpuArray(complex(single(obj.PML .* obj.derivativeSlowness)));
+                    gpuArray(complex(single(C .* derivativeSlowness)));
             end
 
             % Compute Block LU Factorization on GPU
@@ -237,16 +195,7 @@ classdef HelmholtzSolver
 
             % Compute [dH/ds u] where H is Helmholtz matrix and u is the wavefield
             if nargout > 1
-                if strcmp(obj.backend, 'gpu')
-                    % Create Sparse Matrix
-                    % Keep virtual sources resident for adjoint and line search.
-                    virtSrcs = obj.virtualSourceMultiplier .* wvfield;
-                else
-                    % Create Sparse Matrix
-                    wvfield_matrix = obj.PML .* obj.derivativeSlowness;
-                    % Compute Virtual Sources
-                    virtSrcs = wvfield_matrix .* wvfield;
-                end
+                virtSrcs = obj.virtualSourceMultiplier .* wvfield;
             end
 
             % GPU solves remain resident. Callers gather only final diagnostics.

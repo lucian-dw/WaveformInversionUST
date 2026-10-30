@@ -2,7 +2,8 @@ function [loss, gradient, cache] = wust_oracle(c, obs, fi, cfg)
     % Source-projected least squares at one frequency on prepared observations.
     % The exact discrete gradient is with respect to slowness s = 1/c [s/m].
     % Per-source scale a=(u'*d)/(u'*u); the envelope theorem removes da/ds.
-    timer = tic;
+    need_gradient = nargout > 1;
+    retain_state = nargout > 2;
     ny = obs.shape_yx(1);
     nx = obs.shape_yx(2);
     nt = obs.n_tx;
@@ -14,13 +15,14 @@ function [loss, gradient, cache] = wust_oracle(c, obs, fi, cfg)
                              obs.frequencies_hz(fi), -1, cfg.pml_strength, cfg.pml_m, ...
                              struct('backend', cfg.backend, 'stencil_bounds', cfg.stencil_bounds, ...
                                     'dispersion', dispersion));
-    sync(cfg.backend);
-    factorSeconds = toc(timer);
-    timer = tic;
-    gradient = zeros(ny, nx);
+    if need_gradient
+        gradient = zeros(ny, nx);
+    end
     loss = 0;
-    virtual = cell(0);
-    scales = cell(0);
+    if retain_state
+        virtual = cell(0);
+        scales = cell(0);
+    end
     forwardSeconds = 0;
     adjointSeconds = 0;
     for first = 1:cfg.source_batch_size:nt
@@ -31,7 +33,11 @@ function [loss, gradient, cache] = wust_oracle(c, obs, fi, cfg)
             source(obs.tx_index(ids(j)) + (j - 1) * ny * nx) = 1;
         end
         solveTimer = tic;
-        [u, v] = solver.solve(source, false);
+        if need_gradient
+            [u, v] = solver.solve(source, false);
+        else
+            u = solver.solve(source, false);
+        end
         sync(cfg.backend);
         forwardSeconds = forwardSeconds + toc(solveTimer);
         u = reshape(u, ny * nx, nb);
@@ -53,23 +59,30 @@ function [loss, gradient, cache] = wust_oracle(c, obs, fi, cfg)
         assert(all(local(isfinite(scale))), 'WUST:NumericalFailure', 'Nonfinite source scale');
         residual = (predicted .* scale - observed) .* mask;
         loss = loss + 0.5 * double(local(sum(abs(residual).^2, 'all')));
-        rhs = zeros(ny * nx, nb, 'like', residual);
-        rhs(obs.rx_index, :) = residual;
-        solveTimer = tic;
-        adjoint = solver.solve(reshape(rhs, ny, nx, nb), true);
-        adjoint = solver.massApply(adjoint, true);
-        gradient = gradient + double(local(sum(-real(conj(v .* reshape(scale, 1, 1, nb)) .* adjoint), 3)));
-        sync(cfg.backend);
-        adjointSeconds = adjointSeconds + toc(solveTimer);
-        virtual{end + 1} = v; %#ok<AGROW>
-        scales{end + 1} = scale; %#ok<AGROW>
+        if need_gradient
+            rhs = zeros(ny * nx, nb, 'like', residual);
+            rhs(obs.rx_index, :) = residual;
+            solveTimer = tic;
+            adjoint = solver.solve(reshape(rhs, ny, nx, nb), true);
+            adjoint = solver.massApply(adjoint, true);
+            gradient = gradient + double(local(sum(-real(conj(v .* reshape(scale, 1, 1, nb)) .* adjoint), 3)));
+            sync(cfg.backend);
+            adjointSeconds = adjointSeconds + toc(solveTimer);
+            clear adjoint rhs;
+        end
+        if retain_state
+            virtual{end + 1} = v; %#ok<AGROW>
+            scales{end + 1} = scale; %#ok<AGROW>
+        end
+        clear u v source;
     end
-    assert(isfinite(loss) && all(isfinite(gradient(:))), ...
+    assert(isfinite(loss) && (~need_gradient || all(isfinite(gradient(:)))), ...
            'WUST:NumericalFailure', 'Nonfinite objective/gradient');
-    cache = struct('solver', solver, 'virtual', {virtual}, 'scales', {scales}, ...
-                   'data_norm', obs.frequency_data_norm(fi), 'factor_seconds', factorSeconds, ...
-                   'forward_seconds', forwardSeconds, 'adjoint_seconds', adjointSeconds, ...
-                   'oracle_seconds', factorSeconds + toc(timer), 'forward_rhs', nt, 'adjoint_rhs', nt);
+    if retain_state
+        cache = struct('solver', solver, 'virtual', {virtual}, 'scales', {scales}, ...
+                       'forward_seconds', forwardSeconds, 'adjoint_seconds', adjointSeconds, ...
+                       'forward_rhs', nt, 'adjoint_rhs', nt);
+    end
 end
 
 function name = classUnderlyingLocal(a)

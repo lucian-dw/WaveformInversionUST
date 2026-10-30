@@ -13,7 +13,8 @@
 ~~~
 
 WUST 不依赖 BenchLab，不从病例真值生成生产观测。输入可以是 frequency_input，
-也可以是已经准备的 measurements。位置用 [x,y]，图像用 [y,x]；完整规范见
+也可以是规范文件 measurements。文件解码后仍需恢复坐标、有效接收数和观测能量；
+同进程已准备的对象直接进入重建，修改 Y/mask 后显式重新准备。位置用 [x,y]，图像用 [y,x]；完整规范见
 [CONTRACTS](CONTRACTS.md)。
 
 ## 一次重建
@@ -23,8 +24,11 @@ Python launcher：检查协议、路径和时限
   -> 一个 MATLAB 进程
        -> prepare_observations：轴/单位/mask、频率排序、落点与傅里叶转换
        -> 完整 Hz 计划 -> 按 max_updates 截断
+       -> 检查 TX/拟合 RX 位于最外圈 Dirichlet 内部；最终评价启用时覆盖所有规范频率
        -> 每项：Helmholtz 正演 -> 复源尺度消元 -> 残差与伴随
                -> NCG/曲率步长 -> 慢度更新 -> 限幅与边界约束
+               -> 记录实际标量并释放当前 solver/虚源缓存
+       -> 可选最终全频损失：仅正演，不计算伴随
   -> 写出 HDF5 数值数组 -> JSON 成功索引
 ~~~
 
@@ -35,7 +39,7 @@ native-batch 仿真中每个 TX 是独立场，TX/RX 不必相同；设备与批
 ## 结果
 
 声速 c_mps 为米/秒。日志包含完整/实际频率计划、更新数、更新时间和逐频更新前 loss。
-计划结束不是收敛。超时由外层回收所属进程组，不伪造最终图像；未计算的最终残差留空。
+计划结束不是收敛。超时由外层回收所属进程组，不伪造最终图像；未计算的最终残差由 producer 写成 JSON null。
 fixture 生成和正式重建分别计时，CPU、GPU、native 验收各自记录。
 
 [部署](../Runtime/README.md) · [协议示例](RUNTIME_API.md) ·

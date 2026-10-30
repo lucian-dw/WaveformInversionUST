@@ -8,14 +8,14 @@ This is research software, not a clinically validated reconstruction system.
 
 ## Install
 
-Python 3.10+ with NumPy/h5py provides the external launcher. MATLAB is required
+Python 3.12+ with NumPy/h5py provides the external launcher. MATLAB is required
 for reconstruction. GPU execution additionally needs Parallel Computing Toolbox
 and CUDA MEX; FIR resampling needs Signal Processing Toolbox. k-Wave is only a
 simulation dependency. See [deployment](Runtime/README.md).
 
 ~~~bash
 python -m pip install numpy h5py
-python Runtime/python/wust_runtime.py describe --json
+python Runtime/python/wust_runtime.py describe
 ~~~
 
 Discovery is static and does not start MATLAB. An explicit host check is:

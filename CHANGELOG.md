@@ -37,3 +37,24 @@ See [Runtime API](docs/RUNTIME_API.md), [numerics](docs/CONTRACTS.md),
   repaired. Third-party changes remain limited to those functional dependencies.
 - Maintained MATLAB code is multiline. Array fields remain defined once in
   contracts.FIELDS; Python codecs publish arrays before the manifest.
+
+## Round 3: prepared observations and bounded state lifetime
+
+- File reconstruction decodes then prepares observations once in `wust_run`.
+  Canonical artifacts consume Y directly; in-memory reconstruction consumes the
+  prepared object. Changing Y/mask requires explicit re-preparation.
+- TX and fitted RX exclude only outer Dirichlet degrees of freedom. The PML
+  update-mask restriction is independent; optional final evaluation validates
+  all canonical frequencies, including a zero-update run.
+- `wust_oracle` computes only requested outputs. Final loss does not run an
+  adjoint; per-update solver/virtual-source state is released after curvature
+  and work records. Solver backend and stencil bounds are explicit arguments.
+- General codecs expose `write_artifact`; `describe` always returns JSON.
+  Unavailable metrics originate as JSON null. Current fixtures use canonical
+  grid/positions, not coordinate/index conversion shims.
+- Removed unused MEX resource accessors, duplicate storage checks, diagnostic
+  printf, and the unconsumed native batch-size dataset. Native source layout,
+  RAII ownership and residual guards remain validated.
+
+The current [validation record](docs/validation.md) separates Python, MATLAB CPU,
+MEX/GPU, native simulation and the shared BenchLab public fixture results.

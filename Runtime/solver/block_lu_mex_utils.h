@@ -17,17 +17,6 @@
 inline __host__ __device__ cuFloatComplex operator*(cuFloatComplex a, cuFloatComplex b) {
     return cuCmulf(a,b);
 }
-inline __host__ __device__ void operator*=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a * b;
-    a.x = c.x; a.y = c.y;
-}
-inline __host__ __device__ cuFloatComplex operator/(cuFloatComplex a, cuFloatComplex b) {
-    return cuCdivf(a,b);
-}
-inline __host__ __device__ void operator/=(cuFloatComplex &a, cuFloatComplex b) {
-    const cuFloatComplex c = a / b;
-    a.x = c.x; a.y = c.y;
-}
 inline __host__ __device__ cuFloatComplex operator+(cuFloatComplex a, cuFloatComplex b) {
     return cuCaddf(a,b);
 }
@@ -103,29 +92,6 @@ public:
         }
         return status;
     }
-    cudaError_t device(void** pointer, size_t bytes) {
-        const cudaError_t status = cudaMalloc(pointer, bytes);
-        if (status == cudaSuccess) {
-            const auto value = *pointer;
-            cleanup.emplace_back([value] { return static_cast<int>(cudaFree(value)); });
-        }
-        return status;
-    }
-    void* host(size_t bytes) {
-        void* value = mxMalloc(bytes);
-        cleanup.emplace_back([value] { mxFree(value); return 0; });
-        return value;
-    }
-#if CUDART_VERSION >= 11000
-    cusolverStatus_t params(cusolverDnParams_t* handle) {
-        const cusolverStatus_t status = cusolverDnCreateParams(handle);
-        if (status == CUSOLVER_STATUS_SUCCESS) {
-            const auto value = *handle;
-            cleanup.emplace_back([value] { return static_cast<int>(cusolverDnDestroyParams(value)); });
-        }
-        return status;
-    }
-#endif
     void close() {
         const int status = release();
         if (status) wustFail("WUST:ResourceCleanup", "GPU resource release failed: %d", status);

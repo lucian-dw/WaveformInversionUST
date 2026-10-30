@@ -20,7 +20,9 @@ function wust_run(requestPath)
                 cfg.measurement_provenance = rf.measurement_provenance;
                 result = wust_prepare(rf, cfg);
             case 'reconstruct'
-                obs = wust_read_artifact(req.input_manifest, {'wust.frequency_input', 'wust.measurements'});
+                input = wust_read_artifact(req.input_manifest, {'wust.frequency_input', 'wust.measurements'});
+                obs = wust_prepare_observations(input);
+                clear input;
                 initial = wust_read_artifact(req.initial_manifest, 'wust.initial_model');
                 cfg = req.config;
                 cfg.update_mask = initial.update_mask;

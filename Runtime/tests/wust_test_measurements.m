@@ -9,17 +9,6 @@ function [obs, sound_speed, source] = wust_test_measurements(spec, backend, freq
     root = fileparts(fileparts(mfilename('fullpath')));
     addpath(fullfile(root, 'matlab'));
     wust_setup(backend);
-    if ~isfield(spec, 'grid')
-        dx = mean(diff(spec.x_m));
-        dy = mean(diff(spec.y_m));
-        spec.grid = struct('shape_yx', [numel(spec.y_m), numel(spec.x_m)], ...
-                           'origin_yx_m', [spec.y_m(1) - dy / 2, spec.x_m(1) - dx / 2], ...
-                           'spacing_yx_m', [dy, dx], 'origin_kind', 'pixel_edge');
-        [row, col] = ind2sub(spec.grid.shape_yx, spec.tx_index);
-        spec.tx_xy_m = [reshape(spec.x_m(col), [], 1), reshape(spec.y_m(row), [], 1)];
-        [row, col] = ind2sub(spec.grid.shape_yx, spec.rx_index);
-        spec.rx_xy_m = [reshape(spec.x_m(col), [], 1), reshape(spec.y_m(row), [], 1)];
-    end
     geo = wust_geometry(spec.grid, spec.tx_xy_m, spec.rx_xy_m);
     [X, Y] = meshgrid(geo.x_m, geo.y_m);
     sound_speed = 1500 + 30 * exp(-(X.^2 + Y.^2) / 3e-5);
@@ -62,6 +51,6 @@ function [obs, sound_speed, source] = wust_test_measurements(spec, backend, freq
                    'measurement_provenance', 'coherent_Helmholtz_fixture');
     obs = wust_prepare_observations(input);
     if nargin >= 4 && ~isempty(outputPath)
-        wust_write_artifact(outputPath, input);
+        wust_write_artifact(outputPath, obs);
     end
 end

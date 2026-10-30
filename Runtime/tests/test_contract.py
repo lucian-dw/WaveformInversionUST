@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "Runtime/python"))
 import contracts
 import process
 import wust_runtime as runtime
-from wust_io import atomic_json, publish_result, read_artifact, read_json
+from wust_io import atomic_json, read_artifact, read_json, write_artifact
 
 
 def process_states():
@@ -77,7 +77,7 @@ def fixture(folder):
         "tx_xy_m": "m",
         "rx_xy_m": "m",
     }
-    publish_result(
+    write_artifact(
         folder / "input.json", "wust.frequency_input", meta, arrays, axes, units
     )
     req = {
@@ -107,7 +107,6 @@ class ContractTests(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "Runtime/python/wust_runtime.py"),
                 "describe",
-                "--json",
             ],
             capture_output=True,
             text=True,
@@ -141,11 +140,9 @@ class ContractTests(unittest.TestCase):
     def test_artifact_roundtrip_and_axis_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
-            for i, residual in enumerate(
-                ([], None, {"absolute": 0.5, "relative": None})
-            ):
+            for i, residual in enumerate((None, {"absolute": 0.5, "relative": None})):
                 path = folder / f"result_{i}.json"
-                publish_result(
+                write_artifact(
                     path,
                     "wust.reconstruction",
                     {"final_data_residual": residual},
@@ -154,8 +151,8 @@ class ContractTests(unittest.TestCase):
                     {"c_mps": "m/s"},
                 )
                 decoded, _ = read_artifact(path)
-                expected = None if residual == [] else residual
-                self.assertEqual(decoded["metadata"]["final_data_residual"], expected)
+                self.assertEqual(decoded["metadata"]["final_data_residual"], residual)
+                self.assertEqual(read_json(path)["metadata"], decoded["metadata"])
             fixture(folder)
             doc, a = read_artifact(folder / "input.json")
             self.assertEqual(a["pressure"].shape, (3, 2, 4))
@@ -192,7 +189,7 @@ class ContractTests(unittest.TestCase):
             a["mask"][0, 0] = False
             a["pressure"][:, 0, 0] = np.nan
             a["pressure"][:, 1, 0] = 0
-            publish_result(
+            write_artifact(
                 folder / "valid.json", doc["schema"], doc["metadata"], a, axes, units
             )
             _, b = read_artifact(folder / "valid.json")
@@ -206,6 +203,39 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 atomic_json(p, {"second": 2})
             self.assertEqual(read_json(p), {"first": 1})
+
+    def test_runtime_publication_preserves_null_and_reports_write_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as tmp:
+                folder = Path(tmp)
+                work = folder / "result-run"
+                work.mkdir()
+                source = work / "result.json"
+                output = folder / "published.json"
+                metadata = {"final_data_residual": None, "completed_updates": 0}
+                doc = write_artifact(
+                    source,
+                    "wust.reconstruction",
+                    metadata,
+                    {"c_mps": np.full((2, 3), 1500.0)},
+                    {"c_mps": "y,x"},
+                    {"c_mps": "m/s"},
+                )
+                if fail:
+                    with patch.object(
+                        runtime, "atomic_json", side_effect=OSError("write failed")
+                    ), self.assertRaisesRegex(OSError, "write failed"):
+                        runtime.publish_runtime_output(source, output, doc)
+                    self.assertFalse(output.exists())
+                    self.assertTrue(source.exists())
+                else:
+                    runtime.publish_runtime_output(source, output, doc)
+                    self.assertFalse(source.exists())
+                    self.assertEqual(read_json(output)["metadata"], metadata)
+                    decoded, arrays = read_artifact(output, "wust.reconstruction")
+                    self.assertEqual(decoded["metadata"], metadata)
+                    np.testing.assert_array_equal(arrays["c_mps"], 1500.0)
+                self.assertTrue((folder / "result-run.h5").exists())
 
     def test_simulation_units_and_rf_axes_are_explicit(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -228,7 +258,7 @@ class ContractTests(unittest.TestCase):
                 "rx_xy_m": "m",
                 "source_pressure": "Pa",
             }
-            publish_result(
+            write_artifact(
                 folder / "simulation.json",
                 "wust.simulation_input",
                 {},
@@ -249,11 +279,11 @@ class ContractTests(unittest.TestCase):
                 "rx_xy_m": "rx,xy",
             }
             units = {"pressure": "Pa", "time_s": "s", "tx_xy_m": "m", "rx_xy_m": "m"}
-            publish_result(
+            write_artifact(
                 folder / "rf.json", "wust.rf", {"data_units": "Pa"}, rf, axes, units
             )
             axes["pressure"] = "frequency,tx,rx"
-            publish_result(
+            write_artifact(
                 folder / "bad.json",
                 "wust.rf",
                 {"data_units": "Pa"},

@@ -19,7 +19,7 @@ simulation are explicit tooling, not implicit reconstruction stages. Normal FWI
 does not run separate ingestion or availability-probe MATLAB processes.
 
 ```bash
-python Runtime/python/wust_runtime.py describe --json
+python Runtime/python/wust_runtime.py describe
 python Runtime/python/wust_runtime.py run /absolute/request.json \
   --matlab /path/to/matlab --timeout-s 300
 ```
@@ -103,7 +103,19 @@ explicit instrument units or `unknown`. Provenance is acquisition information,
 not a source-code identity. Invalid channels are zeroed before arithmetic;
 valid zero pressure remains valid data.
 
-`wust_prepare_observations` owns geometry, sorting, conjugation and masks.
+`wust_read_artifact` only decodes the file. `wust_run` then calls
+`wust_prepare_observations` once before reconstruction. Frequency input is
+reordered/conjugated as declared; canonical input directly supplies `Y`, mask,
+strictly increasing frequencies, sign -1 and its declared normalization.
+Both paths prepare coordinates, counts and observation energy.
+`wust_reconstruct` consumes this prepared object without preparing it again.
+In-memory callers use the result of `wust_prepare` or
+`wust_prepare_observations` directly; after changing `Y` or mask they must
+explicitly call `wust_prepare_observations` again.
+
+The Python codec entry point for all artifact kinds is `write_artifact`.
+`publish_runtime_output` owns moving completed temporary runtime arrays and
+publishing the final manifest. `describe` always emits JSON.
 
 RF `prepare` requests pass the explicit `grid` unchanged to `wust_prepare`.
 Derived coordinates are not additional configuration fields. The public path
@@ -122,8 +134,12 @@ Canonical measurements have `Y[tx,rx,frequency]`, matching mask, strictly sorted
 frequencies, physical positions and one-based sampling indices. Derived grid
 coordinates are computed from grid, not stored as duplicate protocol arrays.
 Nearest-grid ties use the lowest index; duplicate same-array snapped elements
-are rejected. Source scale is eliminated per TX/frequency using at least two
-valid receivers. No external source spectrum or water reference is required.
+are rejected. TX and fitted RX must be on internal grid points, excluding only
+the outer Dirichlet ring, not all PML points. Source scale is eliminated per
+TX/frequency using at least two valid receivers. Admission covers the truncated
+schedule, or every canonical frequency when final evaluation is enabled,
+including when no updates are requested. No external source spectrum or water
+reference is required.
 
 Initial model has `initial_mps[y,x]` and `update_mask[y,x]`. Shapes, positive speed
 bounds and exclusion of PML/Dirichlet boundaries are checked in MATLAB; no silent
@@ -135,7 +151,12 @@ Final `c_mps[y,x]` is float64; optional `history_mps[y,x,model_step]` is float32
 Metadata includes actual version/backend/precision, complete planned length,
 completed updates, canonical/executed frequencies, observation preparation and
 per-update records. `loss_before_update` describes that frequency at the previous
-model, never the final model. An uncomputed final residual is null.
+model, never the final model. An uncomputed final residual is null in the
+producer's JSON, before any reader runs. MATLAB represents unavailable numeric
+values as `NaN` and encodes them as null; readers do not translate empty arrays.
+Final evaluation requests loss only: one forward RHS per TX/frequency, zero
+adjoint RHS. `assembly_seconds` covers solver assembly and GPU uploads;
+`factor_seconds` covers CPU LU or GPU Schur factorization, with GPU synchronization.
 
 One schedule entry is one full-slowness update, units s/m. Relative L2 change is
 measured over the declared update mask and normalized by old slowness norm.

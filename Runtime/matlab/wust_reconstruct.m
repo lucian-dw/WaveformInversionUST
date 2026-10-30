@@ -1,7 +1,8 @@
 function result = wust_reconstruct(obs, initial, cfg)
     % Frequency-continuation FWI in slowness, using clipped PR/FR NCG.
     % The linearized step uses the exact discrete mass-stencil derivative.
-    [obs, cfg] = prepare_reconstruction(obs, initial, cfg);
+    % obs is prepared once at the file or in-memory observation boundary.
+    cfg = prepare_reconstruction(obs, initial, cfg);
     wust_setup(cfg.backend);
     c = double(initial);
     mask = cfg.update_mask;
@@ -40,8 +41,8 @@ function result = wust_reconstruct(obs, initial, cfg)
         absolute_residual = sqrt(2 * loss);
         relative_residual = NaN;
         residual_status = 'zero_observation_energy';
-        if state.data_norm > 0
-            relative_residual = absolute_residual / sqrt(state.data_norm);
+        if obs.frequency_data_norm(fi) > 0
+            relative_residual = absolute_residual / sqrt(obs.frequency_data_norm(fi));
             residual_status = 'available';
         end
         record = struct('step', step, 'frequency_hz', obs.frequencies_hz(fi), ...
@@ -50,7 +51,6 @@ function result = wust_reconstruct(obs, initial, cfg)
                         'relative_residual_before_update', relative_residual, ...
                         'relative_residual_status', residual_status, ...
                         'alpha', alpha, 'beta', beta, 'wall_seconds', toc(stepTimer), ...
-                        'assembly_factor_seconds', state.factor_seconds, ...
                         'assembly_seconds', state.solver.assembly_seconds, ...
                         'factor_seconds', state.solver.factor_seconds, ...
                         'forward_seconds', state.forward_seconds, ...
@@ -58,6 +58,7 @@ function result = wust_reconstruct(obs, initial, cfg)
                         'linearized_seconds', linearSeconds, 'fresh_factorizations', 1, ...
                         'forward_rhs', state.forward_rhs, 'adjoint_rhs', state.adjoint_rhs, ...
                         'linearized_rhs', numel(obs.tx_index));
+        clear state;
         record.relative_slowness_update = norm(1 ./ c(mask) - oldSlowness(mask)) ...
             / max(norm(oldSlowness(mask)), realmin);
         record.stage_id = fi;
@@ -83,9 +84,7 @@ function result = wust_reconstruct(obs, initial, cfg)
     end
     result = struct('schema', 'wust.reconstruction', 'schema_version', 2, ...
                     'c_mps', c, 'records', records, 'config', cfg, ...
-                    'wall_seconds', toc(allTimer), ...
-                    'selection', 'final (no target labels or best-GT selection)', ...
-                    'gradient_contract', 'exact discrete nine-point mass stencil');
+                    'wall_seconds', toc(allTimer));
     if cfg.save_history
         result.history_mps = history;
     end
@@ -96,15 +95,15 @@ function result = wust_reconstruct(obs, initial, cfg)
     result.canonical_frequencies_hz = obs.frequencies_hz;
     result.observation_preparation = obs.preparation;
     result.completion = struct('category', category, 'reason', reason, 'converged', false);
-    result.final_data_residual = [];
+    % jsonencode converts this unavailable numeric scalar to JSON null.
+    result.final_data_residual = NaN;
     if cfg.evaluate_final_residual
         final_loss = 0;
-        final_energy = 0;
+        final_energy = sum(obs.frequency_data_norm);
         finalTimer = tic;
         for fi = 1:numel(obs.frequencies_hz)
-            [value, ~, final_state] = wust_oracle(c, obs, fi, cfg);
+            value = wust_oracle(c, obs, fi, cfg);
             final_loss = final_loss + value;
-            final_energy = final_energy + final_state.data_norm;
         end
         relative = NaN;
         status = 'zero_observation_energy';
@@ -116,19 +115,13 @@ function result = wust_reconstruct(obs, initial, cfg)
                                             'relative', relative, 'status', status, ...
                                             'oracle_calls', numel(obs.frequencies_hz), ...
                                             'forward_rhs', numel(obs.tx_index) * numel(obs.frequencies_hz), ...
-                                            'adjoint_rhs', numel(obs.tx_index) * numel(obs.frequencies_hz), ...
+                                            'adjoint_rhs', 0, ...
                                             'wall_seconds', toc(finalTimer));
     end
     result.wall_seconds = toc(allTimer);
-    result.update_semantics = struct('optimization_variable', 'slowness', ...
-                                     'update_variable', 'full_slowness', 'update_units', 's/m', 'update_norm', 'l2', ...
-                                     'update_norm_scope', 'declared_update_mask', ...
-                                     'update_normalization', 'norm(s_new-s_old)/norm(s_old)', ...
-                                     'iteration_unit', 'frequency_schedule_update', 'update_rtol_enabled', false);
 end
 
-function [obs, cfg] = prepare_reconstruction(obs, initial, cfg)
-    obs = wust_prepare_observations(obs);
+function cfg = prepare_reconstruction(obs, initial, cfg)
     required = {'backend', 'bounds_mps', 'max_update_mps', 'step_damping', ...
                 'source_batch_size', 'pml_strength', 'pml_m', 'stencil_bounds', 'wavenumber', ...
                 'filter_cutoff', 'filter_order', 'update_mask'};
@@ -191,14 +184,25 @@ function [obs, cfg] = prepare_reconstruction(obs, initial, cfg)
         schedule = schedule(1:min(n, numel(schedule)));
     end
     cfg.schedule = schedule(:).';
-    counts = obs.valid_receiver_counts(:, unique(cfg.schedule));
-    assert(all(counts(:) >= 2), 'WUST:InvalidInput', ...
-           'Source-scale fitting requires two valid receivers per scheduled TX/frequency');
     if ~isfield(cfg, 'evaluate_final_residual')
         cfg.evaluate_final_residual = false;
     end
     assert(islogical(cfg.evaluate_final_residual) && isscalar(cfg.evaluate_final_residual), ...
            'WUST:InvalidInput', 'evaluate_final_residual must be boolean');
+    evaluated = unique(cfg.schedule);
+    if cfg.evaluate_final_residual
+        evaluated = 1:numel(obs.frequencies_hz);
+    end
+    counts = obs.valid_receiver_counts(:, evaluated);
+    assert(all(counts(:) >= 2), 'WUST:InvalidInput', ...
+           'Source-scale fitting requires two valid receivers per evaluated TX/frequency');
+    % Sampling excludes only Dirichlet degrees of freedom, not the PML.
+    sampling = true(obs.shape_yx);
+    sampling([1, end], :) = false;
+    sampling(:, [1, end]) = false;
+    active_rx = reshape(any(any(obs.mask(:, :, evaluated), 1), 3), [], 1);
+    assert(all(sampling(obs.tx_index)) && all(sampling(obs.rx_index(active_rx))), ...
+           'WUST:InvalidInput', 'TX and fitted RX must sample interior (non-Dirichlet) grid points');
     if ~isfield(cfg, 'save_history')
         cfg.save_history = false;
     end

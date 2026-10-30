@@ -10,6 +10,9 @@ The launcher accepts `--source-indices ...` or `--colocated`, `-i INPUT`, `-o OU
 explicit physical indices through `KWAVE_NATIVE_TX_INDICES_H5`; only the CLI
 boundary decodes this transport field. The expansion function does not read it.
 Invalid physics/layout/index input is rejected before creating an expanded file.
+Source attributes and data are read in the same HDF5 open. Batch count is
+derived by C++ from the expanded `p_source_index` length when
+`KWAVE_NATIVE_SOURCE_BATCH` is enabled; the receipt records the actual batch size.
 
 `SimulationLayout` is prepared once from the native input. Matrix allocation,
 ND FFT planning and device constants share that layout. Dynamic single-domain

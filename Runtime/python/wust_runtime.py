@@ -165,20 +165,25 @@ def run(request_path, matlab="matlab", timeout_s=None, kwave_toolbox_path=None):
     )
     if time.monotonic() - started >= timeout_s:
         raise RuntimeFailure("time_budget", "Deadline expired before final publication")
+    publish_runtime_output(result_path, output, result)
+    return result
+
+
+def publish_runtime_output(result_path, output, result):
+    """Move completed runtime arrays, then publish their final success index."""
+    folder = result_path.parent
     array_file = folder / result["arrays_file"]
     destination = output.parent / f"{folder.name}.h5"
     os.replace(array_file, destination)
     result["arrays_file"] = destination.name
     atomic_json(output, result)
     result_path.unlink()
-    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     describe = commands.add_parser("describe")
-    describe.add_argument("--json", action="store_true")
     describe.add_argument("--probe", action="store_true")
     describe.add_argument("--matlab", default="matlab")
     describe.add_argument("--timeout-s", type=float, default=60)

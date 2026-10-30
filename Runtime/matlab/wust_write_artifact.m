@@ -6,8 +6,9 @@ function wust_write_artifact(path, result)
     names = fieldnames(fields);
     meta = result;
     specs = struct;
-    % Coordinates below are derived from grid/positions, never separate protocol fields.
-    derived = {'x_m', 'y_m', 'tx_snapped_xy_m', 'rx_snapped_xy_m', 'pressure_axes', 'mask_axes'};
+    % Prepared coordinates and statistics are rebuilt from the canonical arrays.
+    derived = {'x_m', 'y_m', 'tx_snapped_xy_m', 'rx_snapped_xy_m', 'pressure_axes', 'mask_axes', ...
+               'shape_yx', 'n_tx', 'n_rx', 'valid_receiver_counts', 'frequency_data_norm'};
     for i = 1:numel(derived)
         if isfield(meta, derived{i})
             meta = rmfield(meta, derived{i});
@@ -70,7 +71,7 @@ function wust_write_artifact(path, result)
                  'arrays_file', 'arrays.h5', 'arrays', specs);
     fid = fopen(path, 'w');
     assert(fid >= 0, 'WUST:InvalidInput', 'Cannot create output');
-    close = onCleanup(@()fclose(fid));
+    cleanup = onCleanup(@()fclose(fid)); %#ok<NASGU>
     fprintf(fid, '%s', jsonencode(doc));
 end
 

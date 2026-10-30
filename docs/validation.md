@@ -1,78 +1,104 @@
-# Final runtime validation
+# Current runtime validation
 
-Executed 2026-10-30 on the isolated F01-F22 branch. MATLAB R2021b, CUDA 11.4,
-NVIDIA A100-SXM4-80GB; Python 3.13.9, NumPy 2.3.5, SciPy 1.17.1, h5py 3.16.0.
+Executed on 2026-10-30 for R01-R20 on `codex/round3-r01-r20`. This record
+replaces the prior F01-F22 snapshot's validation numbers; history remains in Git.
 
-## Results
+## Local Python and static checks
 
-- Complete Python suite: **17 passed, 10 subtests, no skips** (1.43 s).
-  Process-group checks now inspect only successful ps queries.
-- Ruff, Black and Python compileall pass. Maintained MATLAB files are multiline.
-- MEX rebuilt successfully. CPU and GPU test_runtime, frequency ingestion and
-  FIR resampling all pass with final remote MATLAB shell exit code 0.
-- CPU FD errors: continuum **3.46637e-10**, LDR9 **1.97022e-10**.
-- GPU FD errors: continuum **1.112e-3**, LDR9 **4.30214e-4**.
-- Four-update loss: CPU 3.88345e-17 -> 8.95907e-18;
-  GPU 3.88327e-17 -> 8.95982e-18. This is one small fixture, not a general
-  monotonicity claim.
-- FIR pass ratio 0.999878; alias rejection -72.39 dB.
-- Public RF prepare: independent absolute-time DTFT relative error **2.51010e-8**.
-  Includes nonzero time origin, valid zero and masked NaN channels.
-- Native default make -B compiled and linked. Eight-plan shutdown is exercised
-  by the real native-batch run. Native vs MATLAB relative errors:
-  RF **1.7749e-6**, spectrum **8.0549e-7**; final process exit 0.
-- Public WUST reconstruction: passed, one generated coherent fixture, one
-  reconstruct invocation (10.838 s). BenchLab reused that same fixture for CPU
-  and GPU run/save/evaluate/read: **10.734 s / 13.043 s**, both passed.
+macOS arm64, Python 3.12.2, NumPy 2.5.4, h5py 3.16.0:
 
-Earlier direct SSH calls returned 255 after printing passed; these were not
-accepted as process-success evidence. Final remote-shell checks captured
-MATLAB_SHELL_EXIT=0. nvcc warns about deprecated default architecture targets;
-no attempt was made to change unrelated toolchain policy.
+- Complete pytest -q Runtime/tests: **18 passed, 12 subtests passed**, 1.17 s.
+- Ruff/Black: all maintained Python files passed.
+- MISS_HIT 0.9.44, MATLAB 2021b: 10 changed MATLAB files, no findings.
+- git diff --check: passed.
 
-## Maintained commands
+Python tests exercise real temporary JSON/HDF5, launcher/process boundaries and
+native source expansion without requiring MATLAB or GPU. They do not stand in
+for the hardware gates below. JSON null survives the first codec read; a failed
+publication leaves no success manifest. No reader compatibility rewrite remains.
+
+## A100 hardware gates
+
+Fresh mirror on host im2; MATLAB R2021b, NVIDIA A100-SXM4-80GB, CUDA 11.4
+compiler, Python 3.13.9. No old remote checkout, data or result was replaced.
+
+| Entry point | Executed result |
+| --- | --- |
+| test_runtime('cpu') | continuum FD 1.23141e-11; LDR9 FD 3.81486e-10 |
+| CPU update objective | 3.88345e-17 -> 8.95907e-18 |
+| test_ingest_frequency | canonical wire/prepared roundtrip, sign/order, Y/mask refresh passed |
+| test_resampling | passband ratio 0.999878; alias rejection -72.39 dB |
+| Rebuild decompBlockLU / applyBlockLU MEX | passed; deprecated GPU-target compiler warnings only |
+| test_runtime('gpu') | continuum FD 1.11200e-3; LDR9 FD 4.30214e-4 |
+| GPU update objective | 3.88327e-17 -> 8.95982e-18 |
+| Rebuilt native binary, test_native_pipeline | RF relative L2 1.77488e-6; spectrum relative L2 8.05494e-7 |
+| Public RF preparation vs independent absolute-time DTFT | relative L2 2.51010e-8 |
+
+CPU/GPU tests also exercise outer-Dirichlet rejection, permitted internal PML
+sampling, all-frequency final-evaluation admission (including zero updates),
+loss-only equality, explicit solver arguments and MATLAB-produced JSON null.
+Final loss uses zero adjoint RHS. State is cleared after its last per-update
+consumer; the resource test scope is the existing numerical/MEX entry points,
+not a long-running memory profiler.
+
+The native fixture is asymmetric 23x27, 3 unordered independent TX and 4 RX.
+Actual native/serial times: 3.503/1.344 s; this small correctness gate is not a
+speedup claim. The launcher uses batch size 3 and the rebuilt current native
+binary. The earlier shell quoting failure during the make invocation was corrected
+without code changes; the final build and native comparison exited 0.
+
+## Shared public fixture with BenchLab
+
+integration_runtime.py generated one coherent canonical fixture: 23x27,
+2 TX/4 RX, 2 model updates from a 3-entry schedule. WUST's file reconstruction
+passed. BenchLab then reused the same fixture on both explicit backends:
+
+| Backend | Reconstruction time | Public chain |
+| --- | ---: | --- |
+| CPU | 11.185 s | run -> numerical save -> evaluate -> first read passed |
+| GPU | 16.273 s | run -> numerical save -> evaluate -> first read passed |
+
+Each BenchLab run launched MATLAB reconstruction once and generated zero new
+fixtures. Its positive-DTFT/reversed-frequency input tests WUST-owned conversion
+and sorting. Missing GT remains unavailable. Disabled final residual is null;
+schedule truncation reports budget completion, not convergence. All final MATLAB
+gates and their outer SSH commands returned exit 0, not merely printed success.
+
+## Commands
+
+From the runtime repository (use a fresh output directory for each public run):
 
 ~~~bash
 python -m pytest -q Runtime/tests
-ruff check Runtime/python Runtime/tests Runtime/native
-black --check Runtime/python Runtime/tests Runtime/native
-python -m compileall -q Runtime/python Runtime/tests Runtime/native
+python -m ruff check Runtime/python Runtime/native Runtime/tests
+python -m black --check Runtime/python Runtime/native Runtime/tests
 python Runtime/tests/integration_runtime.py --matlab /path/to/matlab \
   --backend cpu --out /absolute/new/coherent-fixture
 python Runtime/tests/integration_runtime.py --matlab /path/to/matlab \
   --prepare-only --out /absolute/new/rf-check
 ~~~
 
+MATLAB, with Runtime/tests on the path:
+
 ~~~matlab
-addpath('Runtime/matlab');
-addpath('Runtime/tests');
-wust_build_mex;
 test_runtime('cpu');
 test_ingest_frequency;
 test_resampling;
+wust_build_mex;
 test_runtime('gpu');
+test_native_pipeline('/path/to/native-launcher', '/absolute/new/native-check', 0);
 ~~~
 
-See [deployment](../Runtime/README.md) for native build/launcher setup and
-test_native_pipeline. Numeric checks and process exit must both pass.
-The shared fixture is 23x27, two TX/four RX; the native comparison is 23x27,
-three independent TX/four RX. No full-size imaging/performance campaign was run.
+See [deployment](../Runtime/README.md) for CUDA/HDF5 build settings and the
+native launcher, and BenchLab scripts/validate_wust_integration.py for the
+shared public chain. Compact gate JSON/JUnit is retained outside source in the
+sibling evidence directory. No new simulation/reconstruction arrays or binaries
+are tracked.
 
-## Scope
+## Limits
 
-The validation covers explicit model/discretization, source elimination,
-preconditioned ROI direction, slowness projection, curvature, batched
-forward/adjoint reuse, protocol axes/masks, RF tooling and resource lifetimes.
-It does not establish clinical validity or equal CPU/GPU precision.
-Schedule completion is not numerical convergence.
-
-Per-unit progress is preserved in the sibling research archive; compact JUnit
-and gate reports are outside source in evidence/final_f01_f22. No binaries or
-raw results were added to Git. No push, PR or merge was performed.
-
-Final artifact inspection found MATLAB's unrequested final residual encoded as
-an empty array. The first Python manifest read now maps that sentinel to null,
-without discarding computed residual objects. After the complete suites, the
-11-test transport subset (8 subtests) and both public CPU/GPU integration gates
-were rerun successfully with an explicit null assertion. No numerical formula
-changed in this final serialization correction.
+GPU uses complex single precision; CPU-double FD accuracy is not claimed for
+GPU. These small fixtures validate the stated discretization, source projection,
+mask/domain handling, lifetime paths and transport. No full-size dataset,
+clinical validity, imaging-quality or throughput campaign was run. Completion
+of a frequency schedule is completion, not numerical convergence.

@@ -10,7 +10,7 @@
 | Sampling indices | MATLAB one-based column-major |
 | RF | [time,rx,tx], time_s in seconds including its actual origin |
 | Canonical spectrum / mask | [tx,rx,frequency] |
-| Frequencies | distinct positive Hz, sorted during preparation |
+| Frequencies | input positive distinct Hz is sorted; canonical Hz is strictly increasing |
 | Transform | $\Delta t\sum p(t)e^{-2\pi ift}$ |
 | Schedule input | physical Hz entries, repetitions are explicit |
 
@@ -20,6 +20,13 @@ Invalid samples are masked before arithmetic; valid zeros remain data.
 There is no implicit crop, resize, nominal circular geometry or water padding.
 
 ## Prepared data
+
+File decoding does not create prepared observations. The file reconstruction
+entry prepares geometry, valid receiver counts and masked energy once:
+$E_f=\sum_{t,r}|Y_{trf}|^2$, with invalid channels already zeroed.
+Canonical input directly supplies its arrays and contracts, without sorting or
+Fourier conversion. In-memory reconstruction consumes a complete prepared
+object; mutations of Y or mask require explicit re-preparation.
 
 RF decimation uses delay-compensated polyphase FIR; factor one preserves samples.
 The actual saved time axis determines the DTFT. An optional homogeneous-tof
@@ -37,9 +44,13 @@ a^\star=\frac{p^Hd}{p^Hp},\qquad
 \Phi_\omega(s)=\frac12\sum_{\rm TX}\|a^\star p(s)-d\|_2^2 .
 $$
 
-At least two valid receivers per scheduled TX/frequency are required. Source-scale
+At least two valid receivers per evaluated TX/frequency are required. Source-scale
 elimination removes a scalar amplitude/phase, not arbitrary receiver distortion.
 Its derivative drops out of the gradient by stationarity of the eliminated scale.
+All TX and fitted RX sample only internal grid points. The excluded outer
+Dirichlet ring is independent of the stricter PML exclusion for the update ROI.
+Admission checks the truncated schedule, or all canonical frequencies if final
+evaluation is enabled, even for zero updates.
 
 The optimized stencil is $H=K+M_{\rm mass}\operatorname{diag}(\mathrm{PML}\,q(s))$.
 The virtual source uses the full mass stencil; the adjoint applies its conjugate
@@ -52,6 +63,11 @@ cannot be inferred from decimated RF or clinical data.
 The CPU owns one `decomposition(H, 'lu')` per model/frequency. Forward,
 adjoint and curvature batches reuse it, including its conjugate transpose.
 CPU sparse assembly and GPU block assembly consume `ninePointCoefficients`.
+Backend and fixed ordered stencil speed bounds are explicit solver arguments.
+One-output oracle calls compute only loss and request no virtual sources or
+adjoint solves. Two outputs compute the gradient without retaining batches;
+three outputs retain solver/virtual sources/scales for directional curvature.
+The reconstruction releases that state after its last per-step consumer.
 
 ## Update and schedule
 
@@ -82,7 +98,8 @@ is resolved first, then truncated by max_updates. Every entry is one model updat
 Each loss belongs to the **pre-update model at that entry's frequency**.
 A final-model residual is null by default. Explicit
 `evaluate_final_residual: true` evaluates it across all canonical input frequencies
-and records additional oracle/RHS counts and time separately. Zero observation
+and records additional oracle/RHS counts and time separately, with zero adjoint
+RHS. Final normalization sums the prepared $E_f$. Zero observation
 energy yields a null relative residual with `zero_observation_energy` status;
 the absolute residual is still reported.
 

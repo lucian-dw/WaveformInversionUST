@@ -40,12 +40,6 @@ def read_manifest(path, expected=None):
     exact_keys(doc, {"schema", "schema_version", "metadata", "arrays_file", "arrays"})
     if not isinstance(doc["metadata"], dict):
         raise ValueError("metadata must be an object")  # noqa: TRY004
-    if (
-        doc["schema"] == "wust.reconstruction"
-        and doc["metadata"].get("final_data_residual") == []
-    ):
-        # MATLAB [] means no requested final evaluation, not a residual array.
-        doc["metadata"]["final_data_residual"] = None
     fields = FIELDS[doc["schema"]]
     exact_keys(
         doc["arrays"],
@@ -129,7 +123,7 @@ def read_artifact(path, expected=None):
     return doc, result
 
 
-def publish_result(path, name, metadata, arrays, axes, units):
+def write_artifact(path, name, metadata, arrays, axes, units):
     """Write each array once, followed by its manifest; no whole-array readback."""
     import h5py
     import numpy as np

@@ -51,6 +51,7 @@ function obs = wust_prepare(rf, cfg)
         snapped_distance = pair_distance(obs.tx_snapped_xy_m, obs.rx_snapped_xy_m);
         delay_s = (snapped_distance - measured_distance) / cfg.c_geom_mps;
         obs.Y = obs.Y .* exp(-2i * pi * delay_s .* reshape(obs.frequencies_hz, 1, 1, []));
+        obs.frequency_data_norm = reshape(sum(sum(abs(double(obs.Y)).^2, 1), 2), [], 1);
     end
     obs.preparation.rf_config = cfg;
     obs.preparation.phase_correction = cfg.phase_correction;

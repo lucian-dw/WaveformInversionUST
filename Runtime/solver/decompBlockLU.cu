@@ -61,18 +61,6 @@ void __global__ triDiagMat(cuComplex const * const Ad,
     }
 }
 
-/* Device code - Copy Interior of Matrix */
-
-
-/* Device code - Initialize Interior Identity Matrix */
-
-
-/* Device code - Tridiagonal Matrix Multiply from Left */
-
-
-/* Device code - Tridiagonal Matrix Multiply from Right */
-
-
 /* Fuse A*U and D-L*(A*U), avoiding a full Ny-by-Ny scratch round trip. */
 void __global__ schurUpdateFused(cuComplex const * const A,
                                  cuComplex const * const Ld,
@@ -229,7 +217,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
         !(mxIsGPUArray(prhs[7])) ||
         !(mxIsGPUArray(prhs[8])) ) {
         wustFail("WUST:InvalidInput",
-                          "Invalid input to triDiagMultLeftGPUmex: Expecting 9 gpuArray inputs");
+                          "decompBlockLU requires 9 gpuArray inputs.");
     }
 
     /* Assemble GPU Arrays from Inputs */

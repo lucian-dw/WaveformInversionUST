@@ -8,9 +8,11 @@ function test_runtime(backend)
     wust_setup(backend);
     check_mex_boundary(backend);
     x = (-15:15) * 1e-3;
-    spec = struct('x_m', x, 'y_m', x, ...
-                  'tx_index', sub2ind([31, 31], [10, 22, 16], [8, 23, 25]).', ...
-                  'rx_index', sub2ind([31, 31], [8, 15, 23, 18], [13, 24, 15, 8]).', ...
+    grid = struct('shape_yx', [31, 31], 'origin_yx_m', [-.0155, -.0155], ...
+                  'spacing_yx_m', [.001, .001], 'origin_kind', 'pixel_edge');
+    spec = struct('grid', grid, ...
+                  'tx_xy_m', [x([8, 23, 25]).', x([10, 22, 16]).'], ...
+                  'rx_xy_m', [x([13, 24, 15, 8]).', x([8, 15, 23, 18]).'], ...
                   'frequencies_hz', [1e5, 1.2e5]);
     [obs, sound_speed, source] = wust_test_measurements(spec, backend, spec.frequencies_hz);
     [X, Y] = meshgrid(obs.x_m, obs.y_m);
@@ -26,6 +28,12 @@ function test_runtime(backend)
     cfg.update_mask(:, [1:5, end - 4:end]) = false;
     check_update_rules(x, cfg);
     options = struct('backend', backend, 'stencil_bounds', cfg.stencil_bounds);
+    for invalid = {struct('stencil_bounds', cfg.stencil_bounds), ...
+                   struct('backend', backend), struct('backend', backend, 'stencil_bounds', []), ...
+                   struct('backend', backend, 'stencil_bounds', 1500)}
+        reject(@()HelmholtzSolver(x, x, sound_speed, zeros(size(sound_speed)), ...
+                                  1e5, -1, 10, .004, invalid{1}), 'WUST:InvalidInput');
+    end
     solver = HelmholtzSolver(x, x, sound_speed, zeros(size(sound_speed)), ...
                              1e5, -1, 10, .004, options);
     % Setup cannot change an already constructed instance's backend.
@@ -33,6 +41,7 @@ function test_runtime(backend)
     wave = solver.solve(source, false);
     assert(isa(wave, 'gpuArray') == strcmp(backend, 'gpu'));
     initial = 1500 * ones(size(sound_speed));
+    check_prepared_domain(obs, initial, cfg);
     direction = exp(-((X - .002).^2 + (Y + .003).^2) / 2e-5) .* cfg.update_mask * 1e-6;
     step = 1e-3;
     tolerance = 1e-4;
@@ -42,6 +51,8 @@ function test_runtime(backend)
         tolerance = .03;
     end
     [loss, gradient] = wust_oracle(initial, obs, 1, cfg);
+    loss_only = wust_oracle(initial, obs, 1, cfg);
+    assert(abs(loss_only - loss) <= 1e-6 * loss);
     check_derivative(initial, obs, cfg, direction, step, tolerance);
     batched = cfg;
     batched.source_batch_size = 3;
@@ -53,7 +64,7 @@ function test_runtime(backend)
     assert(strcmp(result.completion.reason, 'schedule_complete'));
     assert(~result.completion.converged && result.completed_updates == 4);
     assert(result.planned_schedule_length == 4);
-    assert(isempty(result.final_data_residual) && result.records(end).loss_model_step == 3);
+    assert(isnan(result.final_data_residual) && result.records(end).loss_model_step == 3);
     final_loss = wust_oracle(result.c_mps, obs, 1, cfg);
     assert(final_loss < loss, 'Training objective did not decrease');
     fprintf('%s FWI loss %.6g -> %.6g\n', backend, loss, final_loss);
@@ -67,21 +78,32 @@ function test_runtime(backend)
     assert(isequal(size(result.history_mps), [31, 31, 2]));
     assert(result.final_data_residual.oracle_calls == numel(obs.frequencies_hz));
     assert(result.final_data_residual.forward_rhs == numel(obs.tx_index) * numel(obs.frequencies_hz));
+    assert(result.final_data_residual.adjoint_rhs == 0);
     assert(isfinite(result.final_data_residual.relative));
     zero = cfg;
     zero.max_updates = 0;
     result = wust_reconstruct(obs, initial, zero);
     assert(isequal(result.c_mps, initial) && isempty(result.records));
     assert(result.completed_updates == 0);
+    folder = tempname;
+    mkdir(folder);
+    cleanup = onCleanup(@()rmdir(folder, 's')); %#ok<NASGU>
+    path = fullfile(folder, 'result.json');
+    wust_write_artifact(path, result);
+    assert(contains(fileread(path), '"final_data_residual":null'));
     zero_data = obs;
     zero_data.Y(:) = 0;
+    zero_data = wust_prepare_observations(zero_data);
+    assert(all(zero_data.frequency_data_norm == 0));
     zero_run = cfg;
     zero_run.max_updates = 1;
+    zero_run.evaluate_final_residual = true;
     result = wust_reconstruct(zero_data, initial, zero_run);
     assert(isequal(result.c_mps, initial));
     assert(result.records.alpha == 0 && result.records.absolute_residual_before_update == 0);
     assert(isnan(result.records.relative_residual_before_update));
     assert(strcmp(result.records.relative_residual_status, 'zero_observation_energy'));
+    assert(result.final_data_residual.absolute == 0 && isnan(result.final_data_residual.relative));
     encoded = jsonencode(result.records);
     assert(contains(encoded, '"relative_residual_before_update":null'));
     default = rmfield(cfg, 'frequency_schedule_hz');
@@ -91,14 +113,58 @@ function test_runtime(backend)
     bad = obs;
     bad.mask(1, :, 1) = false;
     bad.mask(1, 1, 1) = true;
+    bad = wust_prepare_observations(bad);
+    assert(bad.valid_receiver_counts(1, 1) == 1);
     reject(@() wust_reconstruct(bad, initial, cfg), 'WUST:InvalidInput');
     bad = obs;
     bad.Y(:) = realmax / 2;
+    bad = wust_prepare_observations(bad);
     reject(@() wust_reconstruct(bad, initial, cfg), 'WUST:NumericalFailure');
     cfg.wavenumber = 'kwave-ldr9';
     cfg.dispersion = struct('time_step_s', 2e-8, ...
                             'reference_speed_mps', 1700);
     check_derivative(initial, obs, cfg, direction, step, tolerance);
+end
+
+function check_prepared_domain(obs, initial, cfg)
+    one = cfg;
+    one.frequency_schedule_hz = obs.frequencies_hz(1);
+    bad = obs;
+    bad.mask(:, :, 2) = false;
+    bad = wust_prepare_observations(bad);
+    result = wust_reconstruct(bad, initial, one);
+    assert(result.completed_updates == 1);
+    one.evaluate_final_residual = true;
+    reject(@()wust_reconstruct(bad, initial, one), 'WUST:InvalidInput');
+    one.max_updates = 0;
+    reject(@()wust_reconstruct(bad, initial, one), 'WUST:InvalidInput');
+
+    % Dirichlet exclusion is separate from the update-mask PML restriction.
+    boundary = obs;
+    boundary.tx_xy_m(1, 1) = obs.x_m(1);
+    [row, ~] = ind2sub(obs.shape_yx, obs.tx_index(1));
+    boundary.tx_index(1) = sub2ind(obs.shape_yx, row, 1);
+    boundary = wust_prepare_observations(boundary);
+    reject(@()wust_reconstruct(boundary, initial, cfg), 'WUST:InvalidInput');
+    boundary.tx_xy_m(1, 1) = obs.x_m(2);
+    boundary.tx_index(1) = sub2ind(obs.shape_yx, row, 2);
+    boundary = wust_prepare_observations(boundary);
+    one.evaluate_final_residual = false;
+    one.max_updates = 1;
+    result = wust_reconstruct(boundary, initial, one);
+    assert(result.completed_updates == 1 && all(isfinite(result.c_mps(:))));
+
+    boundary = obs;
+    boundary.rx_xy_m(1, 1) = obs.x_m(1);
+    [row, ~] = ind2sub(obs.shape_yx, obs.rx_index(1));
+    boundary.rx_index(1) = sub2ind(obs.shape_yx, row, 1);
+    boundary.mask(:, 1, 1) = false;
+    boundary = wust_prepare_observations(boundary);
+    one.max_updates = 1;
+    result = wust_reconstruct(boundary, initial, one);
+    assert(result.completed_updates == 1);
+    one.evaluate_final_residual = true;
+    reject(@()wust_reconstruct(boundary, initial, one), 'WUST:InvalidInput');
 end
 
 function check_update_rules(x, cfg)

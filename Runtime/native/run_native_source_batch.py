@@ -28,12 +28,10 @@ def expand_input(
         raise ValueError("Expansion requires a new file, never mutate source input")
     if batch_size < 1:
         raise ValueError("Positive batch required")
-    with h5py.File(source_path, "r") as source:
-        source_index_attrs = dict(source["p_source_index"].attrs)
-        source_input_attrs = dict(source["p_source_input"].attrs)
-        sensor_attrs = dict(source["sensor_mask_index"].attrs)
-
     with h5py.File(source_path, "r") as handle:
+        source_index_attrs = dict(handle["p_source_index"].attrs)
+        source_input_attrs = dict(handle["p_source_input"].attrs)
+        sensor_attrs = dict(handle["sensor_mask_index"].attrs)
         nx = int(np.asarray(handle["Nx"][...]).reshape(-1)[0])
         ny = int(np.asarray(handle["Ny"][...]).reshape(-1)[0])
         nz = int(np.asarray(handle["Nz"][...]).reshape(-1)[0])
@@ -60,7 +58,8 @@ def expand_input(
                 raise ValueError(
                     "Native production requires scalar density: " + density
                 )
-        if np.asarray(handle["p_source_index"][...]).size != 1:
+        original_source = np.asarray(handle["p_source_index"][...]).reshape(-1)
+        if original_source.size != 1:
             raise ValueError("Expected one source before independent-TX expansion")
         sensor = (
             np.asarray(handle["sensor_mask_index"][...]).reshape(-1).astype(np.uint64)
@@ -113,7 +112,7 @@ def expand_input(
         mode = int(np.asarray(handle["p_source_mode"][...]).ravel()[0])
         if mode not in (0, 1, 2):
             raise ValueError("Unsupported pressure source mode")
-        first_source = int(np.asarray(handle["p_source_index"][...]).ravel()[0]) - 1
+        first_source = int(original_source[0]) - 1
         if not 0 <= first_source < field_elements:
             raise ValueError("Original source index is outside physical grid")
         amplitude_scale = np.ones(batch_size)
@@ -153,10 +152,6 @@ def expand_input(
                 ds.attrs[key] = value
         handle["p_source_many"][...] = np.uint64(1)
         handle["absorbing_flag"][...] = np.uint64(0)
-        handle.create_dataset(
-            "native_source_batch_size",
-            data=np.asarray([[[batch_size]]], dtype=np.uint64),
-        )
 
     return {
         "batch_size": batch_size,

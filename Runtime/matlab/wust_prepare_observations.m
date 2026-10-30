@@ -2,13 +2,6 @@ function obs = wust_prepare_observations(input)
     % One owner for geometry, frequency order, masks and Fourier conversion.
     wust_assert_schema(input, {'wust.frequency_input', 'wust.measurements'});
     canonical = strcmp(input.schema, 'wust.measurements');
-    if canonical
-        input.pressure = input.Y;
-        input.pressure_axes = 'tx,rx,frequency';
-        input.mask_axes = 'tx,rx,frequency';
-        assert(input.fourier_sign == -1, 'WUST:InvalidInput', ...
-               'Canonical observations require Fourier sign -1');
-    end
     geo = wust_geometry(input.grid, input.tx_xy_m, input.rx_xy_m);
     if canonical
         assert(isequal(input.tx_index(:), geo.tx_index(:)) && ...
@@ -28,34 +21,51 @@ function obs = wust_prepare_observations(input)
     nt = numel(geo.tx_index);
     nr = numel(geo.rx_index);
     nf = numel(f);
-    Y = layout(input.pressure, input.pressure_axes);
+    if canonical
+        assert(isscalar(input.fourier_sign) && input.fourier_sign == -1 && all(diff(f) > 0), ...
+               'WUST:InvalidInput', 'Canonical observations require Fourier sign -1 and strictly increasing frequencies');
+        Y = input.Y;
+        mask = input.mask;
+        pressure_axes = 'tx,rx,frequency';
+        mask_axes = 'tx,rx,frequency';
+    else
+        pressure_axes = input.pressure_axes;
+        mask_axes = input.mask_axes;
+        Y = layout(input.pressure, input.pressure_axes);
+        if strcmp(input.mask_axes, 'tx,rx')
+            assert(isequal(size(input.mask), [nt, nr]), 'WUST:InvalidInput', 'Mask shape mismatch');
+            mask = repmat(input.mask, 1, 1, nf);
+        else
+            mask = layout(input.mask, input.mask_axes);
+        end
+    end
     assert((isa(Y, 'single') || isa(Y, 'double')) && ...
            isequal([size(Y, 1), size(Y, 2), size(Y, 3)], [nt, nr, nf]), ...
            'WUST:InvalidInput', 'Pressure axes/shape mismatch');
-    if strcmp(input.mask_axes, 'tx,rx')
-        assert(isequal(size(input.mask), [nt, nr]), 'WUST:InvalidInput', 'Mask shape mismatch');
-        mask = repmat(input.mask, 1, 1, nf);
-    else
-        mask = layout(input.mask, input.mask_axes);
-    end
     assert(isequal([size(mask, 1), size(mask, 2), size(mask, 3)], [nt, nr, nf]) && ...
            all(mask(:) == 0 | mask(:) == 1), 'WUST:InvalidInput', 'Mask must contain only booleans/0/1');
     mask = logical(mask);
     assert(any(mask(:)) && all(isfinite(Y(mask))), 'WUST:InvalidInput', ...
            'Empty observations or nonfinite pressure on a valid channel');
     Y(~mask) = 0;
-    conversion = 'none';
-    assert(isscalar(input.fourier_sign) && ismember(input.fourier_sign, [-1, 1]), ...
-           'WUST:InvalidInput', 'Declare Fourier sign -1 or +1; unknown conventions are rejected');
-    if input.fourier_sign == 1
-        assert(isfield(input, 'real_pressure') && isequal(input.real_pressure, true), ...
-               'WUST:InvalidInput', 'Conjugation requires declared real time-domain pressure');
-        Y = conj(Y);
-        conversion = 'conjugate';
+    if ~canonical
+        conversion = 'none';
+        assert(isscalar(input.fourier_sign) && ismember(input.fourier_sign, [-1, 1]), ...
+               'WUST:InvalidInput', 'Declare Fourier sign -1 or +1; unknown conventions are rejected');
+        if input.fourier_sign == 1
+            assert(isfield(input, 'real_pressure') && isequal(input.real_pressure, true), ...
+                   'WUST:InvalidInput', 'Conjugation requires declared real time-domain pressure');
+            Y = conj(Y);
+            conversion = 'conjugate';
+        end
+        [sorted, order] = sort(f);
+        Y = Y(:, :, order);
+        mask = mask(:, :, order);
+    else
+        sorted = f;
+        order = (1:nf).';
+        conversion = 'none';
     end
-    [sorted, order] = sort(f);
-    Y = Y(:, :, order);
-    mask = mask(:, :, order);
     obs = geo;
     obs.schema = 'wust.measurements';
     obs.schema_version = 2;
@@ -72,18 +82,19 @@ function obs = wust_prepare_observations(input)
     obs.data_units = input.data_units;
     obs.spectrum_normalization = input.spectrum_normalization;
     obs.pressure_type = 'total_pressure';
-    provenance = 'unknown';
-    if isfield(input, 'measurement_provenance')
-        provenance = input.measurement_provenance;
-    end
-    obs.preparation = struct('input_fourier_sign', input.fourier_sign, ...
-                             'conversion', conversion, 'input_frequencies_hz', f, ...
-                             'canonical_to_input_permutation_1based', order, ...
-                             'input_pressure_axes', input.pressure_axes, 'input_mask_axes', input.mask_axes, ...
-                             'phase_correction', 'none', 'masked_values_policy', 'zero_after_preserving_mask', ...
-                             'input_precision', class(Y), 'measurement_provenance', provenance);
     if canonical && isfield(input, 'preparation')
         obs.preparation = input.preparation;
+    else
+        provenance = 'unknown';
+        if isfield(input, 'measurement_provenance')
+            provenance = input.measurement_provenance;
+        end
+        obs.preparation = struct('input_fourier_sign', input.fourier_sign, ...
+                                 'conversion', conversion, 'input_frequencies_hz', f, ...
+                                 'canonical_to_input_permutation_1based', order, ...
+                                 'input_pressure_axes', pressure_axes, 'input_mask_axes', mask_axes, ...
+                                 'phase_correction', 'none', 'masked_values_policy', 'zero_after_preserving_mask', ...
+                                 'input_precision', class(Y), 'measurement_provenance', provenance);
     end
 end
 

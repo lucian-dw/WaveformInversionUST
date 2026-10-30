@@ -58,14 +58,23 @@ class Contracts(unittest.TestCase):
             h["sensor_mask_index"] = np.array([[[3, 7, 11]]], dtype=np.uint64)
             h["p_source_index"] = np.array([[[3]]], dtype=np.uint64)
             h["p_source_input"] = np.arange(5, dtype=np.float32).reshape(5, 1, 1)
+            for key in ("p_source_index", "p_source_input", "sensor_mask_index"):
+                h[key].attrs["fixture_role"] = key
 
     def test_independent_sources_and_order(self):
         with tempfile.TemporaryDirectory() as d:
             src = Path(d) / "a.h5"
             dst = Path(d) / "b.h5"
             self.make_input(src)
-            native.expand_input(src, dst, 3, source_indices=[11, 3, 7])
+            with patch.object(native.h5py, "File", wraps=h5py.File) as opened:
+                receipt = native.expand_input(src, dst, 3, source_indices=[11, 3, 7])
+            source_opens = [
+                call for call in opened.call_args_list if call.args[0] == src
+            ]
+            self.assertEqual(len(source_opens), 1)
+            self.assertEqual(receipt["batch_size"], 3)
             with h5py.File(src) as original:
+                original_keys = set(original)
                 np.testing.assert_array_equal(
                     original["p_source_index"][...].ravel(), [3]
                 )
@@ -73,6 +82,9 @@ class Contracts(unittest.TestCase):
                     original["p_source_input"][...].ravel(), np.arange(5)
                 )
             with h5py.File(dst) as h:
+                self.assertEqual(set(h), original_keys)
+                for key in ("p_source_index", "p_source_input", "sensor_mask_index"):
+                    self.assertEqual(h[key].attrs["fixture_role"], key)
                 np.testing.assert_array_equal(
                     h["p_source_index"][...].ravel(), [11, 51, 103]
                 )

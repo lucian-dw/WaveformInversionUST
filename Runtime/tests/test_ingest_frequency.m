@@ -31,6 +31,40 @@ function test_ingest_frequency
     assert(isa(obs.Y, 'single') && isequal(obs.frequencies_hz, [1e5; 2e5; 3e5]));
     assert(max(abs(obs.x_m - x)) < eps && max(abs(obs.y_m - y)) < eps);
 
+    % A canonical file has no prepared coordinates/counts/energy to fast-return.
+    folder = tempname;
+    mkdir(folder);
+    cleanup = onCleanup(@()rmdir(folder, 's')); %#ok<NASGU>
+    path = fullfile(folder, 'observations.json');
+    wust_write_artifact(path, obs);
+    wire = wust_read_artifact(path, 'wust.measurements');
+    assert(~isfield(wire, 'x_m') && ~isfield(wire, 'frequency_data_norm'));
+    restored = wust_prepare_observations(wire);
+    assert(isequal(restored.Y, obs.Y) && isequal(restored.mask, obs.mask));
+    assert(isequal(restored.shape_yx, [7, 9]) && restored.n_tx == 2 && restored.n_rx == 4);
+    assert(isequal(restored.valid_receiver_counts, obs.valid_receiver_counts));
+    assert(isequal(restored.frequency_data_norm, obs.frequency_data_norm));
+    assert(isequal(restored.preparation, obs.preparation));
+    assert(strcmp(restored.spectrum_normalization, 'dtft_dt'));
+    unrecorded = wust_prepare_observations(rmfield(wire, 'preparation'));
+    assert(isequal(unrecorded.Y, obs.Y));
+    assert(strcmp(unrecorded.preparation.measurement_provenance, 'unknown'));
+    bad = wire;
+    bad.frequencies_hz = flipud(bad.frequencies_hz);
+    reject(bad);
+    bad = wire;
+    bad.fourier_sign = 1;
+    reject(bad);
+    changed = wire;
+    changed.Y(:) = 1;
+    changed.mask(:) = true;
+    changed = wust_prepare_observations(changed);
+    assert(isequal(changed.frequency_data_norm, [8; 8; 8]));
+    changed.Y(:) = 0;
+    changed.mask(1, 2:end, 1) = false;
+    changed = wust_prepare_observations(changed);
+    assert(all(changed.frequency_data_norm == 0) && changed.valid_receiver_counts(1, 1) == 1);
+
     again = input;
     again.pressure = permute(obs.Y, [3, 1, 2]);
     again.mask = permute(obs.mask, [3, 1, 2]);
@@ -75,6 +109,13 @@ function test_ingest_frequency
     b = wust_prepare_observations(direct);
     assert(norm(a.Y(:) - b.Y(:)) / norm(a.Y(:)) < 1e-6);
     assert(isequal(a.tx_index, b.tx_index) && isequal(a.rx_index, b.rx_index));
+    phase_cfg = cfg;
+    phase_cfg.phase_correction = 'homogeneous-tof';
+    shifted_rf = rf;
+    shifted_rf.tx_xy_m = tx + 1e-4;
+    phased = wust_prepare(shifted_rf, phase_cfg);
+    assert(isequal(phased.frequency_data_norm, ...
+                  reshape(sum(sum(abs(double(phased.Y)).^2, 1), 2), [], 1)));
 
     masked_rf = rf;
     masked_rf.pressure(:, 1, 1) = NaN;

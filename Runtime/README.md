@@ -2,7 +2,7 @@
 
 ## Dependencies and backends
 
-- Python 3.10+, NumPy and h5py: protocol transport and process ownership.
+- Python 3.12+, NumPy and h5py: protocol transport and process ownership.
 - MATLAB: CPU sparse Helmholtz reference solver.
 - Parallel Computing Toolbox and supported CUDA MEX compiler: GPU Block LU.
 - Signal Processing Toolbox: anti-aliased RF decimation.
@@ -10,6 +10,8 @@
 
 Backend selection is explicit; GPU failures do not silently fall back to CPU.
 Each HelmholtzSolver owns its backend. wust_setup changes paths, not global backend state.
+Solver construction requires explicit `backend` and fixed, ordered
+`stencil_bounds=[min,max]`; neither is inferred from the current model.
 
 ~~~matlab
 addpath('Runtime/matlab');
