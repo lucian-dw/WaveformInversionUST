@@ -225,3 +225,23 @@ has been performed as part of this refactor.
   Four-update fixture loss 3.88345e-17 -> 8.95907e-18. This CPU gate does not
   substitute for the final GPU/native and two-repository integration gates.
 - Next: BenchLab F08-F11, then WUST F12 formula/lifecycle consolidation.
+
+## Final taskbook F12
+
+- Extracted frozen-source directional curvature and linearized step length;
+  retained one oracle at the beginning of each update. Before-update losses
+  retain their model-step index; optional final evaluation counts its own work.
+- A100 MATLAB CPU test passed: continuum FD 3.46637e-10, LDR9 1.97022e-10,
+  including requested final residual and its RHS accounting.
+- Next: F13 one coefficient formula, reusable CPU LU and direct LDR9 dq/ds.
+
+## Final taskbook F13
+
+- CPU uses one LU decomposition and its adjoint per model/frequency. Both
+  backends consume the same nine-point coefficient function. Assembly and
+  factorization times are separate; mass-stencil boundary order is unchanged.
+- LDR9 returns dq/ds directly. Removed the cancelling model reference speed
+  from its implementation, BenchLab admission, fixtures and current docs.
+- A100 CPU runtime test passed after these changes: continuum FD 3.46637e-10,
+  LDR9 FD 1.97022e-10; multi-batch and four-update checks passed.
+- Next: F14 named CUDA legacy deletion and 64-bit address products.

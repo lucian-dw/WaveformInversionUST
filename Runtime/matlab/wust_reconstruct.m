@@ -28,38 +28,10 @@ for step = 1:n
     prev_gz = gz;
     last = fi;
 
-    % Linearized pressure curvature, using the same masked source scales.
-    denom = 0;
-    offset = 0;
-    linearTimer = tic;
-    for b = 1:numel(state.virtual)
-        v = state.virtual{b};
-        a = state.scales{b};
-        nb = numel(a);
-        ids = offset + (1:nb);
-        offset = offset + nb;
-        source = state.solver.massApply(v.*direction, false);
-        u = state.solver.solve(source, false);
-        u = reshape(u, [], nb);
-        derivative = -u(obs.rx_index, :).*a.*obs.mask(ids, :, fi).';
-        val = sum(abs(derivative).^2, 'all');
-        if isa(val, 'gpuArray')
-            val = gather(val);
-        end
-        denom = denom + double(val);
-    end
-    if strcmp(cfg.backend, 'gpu')
-        wait(gpuDevice);
-    end
-    linearSeconds = toc(linearTimer);
-    alpha = 0;
-    assert(isfinite(denom) && denom >= 0 && all(isfinite(direction(:))), ...
-        'WUST:NumericalFailure', 'Nonfinite direction/curvature');
-    assert(denom > 0 || all(direction(:) == 0), ...
-        'WUST:NumericalFailure', 'Zero curvature with nonzero update direction');
-    if denom > 0
-        alpha = max(0, -sum(roi_gradient(:).*direction(:))/denom);
-    end
+    [curvature, linearSeconds] = directional_curvature( ...
+        state, direction, obs.rx_index, obs.mask(:, :, fi));
+    slope = sum(roi_gradient(:).*direction(:));
+    alpha = linearized_step_length(slope, curvature);
     oldSlowness = 1./c;
     c = wust_project_slowness_update(c, double(direction), alpha, cfg);
     if cfg.save_history
@@ -79,6 +51,8 @@ for step = 1:n
         'relative_residual_status', residual_status, ...
         'alpha', alpha, 'beta', beta, 'wall_seconds', toc(stepTimer), ...
         'assembly_factor_seconds', state.factor_seconds, ...
+        'assembly_seconds', state.solver.assembly_seconds, ...
+        'factor_seconds', state.solver.factor_seconds, ...
         'forward_seconds', state.forward_seconds, ...
         'adjoint_seconds', state.adjoint_seconds, ...
         'linearized_seconds', linearSeconds, 'fresh_factorizations', 1, ...
@@ -123,6 +97,29 @@ result.canonical_frequencies_hz = obs.frequencies_hz;
 result.observation_preparation = obs.preparation;
 result.completion = struct('category', category, 'reason', reason, 'converged', false);
 result.final_data_residual = [];
+if cfg.evaluate_final_residual
+    final_loss = 0;
+    final_energy = 0;
+    finalTimer = tic;
+    for fi = 1:numel(obs.frequencies_hz)
+        [value, ~, final_state] = wust_oracle(c, obs, fi, cfg);
+        final_loss = final_loss + value;
+        final_energy = final_energy + final_state.data_norm;
+    end
+    relative = NaN;
+    status = 'zero_observation_energy';
+    if final_energy > 0
+        relative = sqrt(2*final_loss/final_energy);
+        status = 'available';
+    end
+    result.final_data_residual = struct('absolute', sqrt(2*final_loss), ...
+        'relative', relative, 'status', status, ...
+        'oracle_calls', numel(obs.frequencies_hz), ...
+        'forward_rhs', numel(obs.tx_index)*numel(obs.frequencies_hz), ...
+        'adjoint_rhs', numel(obs.tx_index)*numel(obs.frequencies_hz), ...
+        'wall_seconds', toc(finalTimer));
+end
+result.wall_seconds = toc(allTimer);
 result.update_semantics = struct('optimization_variable', 'slowness', ...
     'update_variable', 'full_slowness', 'update_units', 's/m', 'update_norm', 'l2', ...
     'update_norm_scope', 'declared_update_mask', ...
@@ -135,7 +132,7 @@ obs = wust_prepare_observations(obs);
 required = {'backend', 'bounds_mps', 'max_update_mps', 'step_damping', ...
     'source_batch_size', 'pml_strength', 'pml_m', 'stencil_bounds', 'wavenumber', ...
     'filter_cutoff', 'filter_order', 'update_mask'};
-allowed = [required, {'dispersion', 'frequency_schedule_hz', 'max_updates', 'save_history'}];
+allowed = [required, {'dispersion', 'frequency_schedule_hz', 'max_updates', 'save_history', 'evaluate_final_residual'}];
 assert(all(ismember(required, fieldnames(cfg))) && all(ismember(fieldnames(cfg), allowed)), ...
     'WUST:InvalidInput', 'Missing or unsupported reconstruction config fields');
 for name = {'pml_m', 'pml_strength', 'max_update_mps', 'step_damping', 'source_batch_size', 'filter_order'}
@@ -197,6 +194,11 @@ cfg.schedule = schedule(:).';
 counts = obs.valid_receiver_counts(:, unique(cfg.schedule));
 assert(all(counts(:) >= 2), 'WUST:InvalidInput', ...
     'Source-scale fitting requires two valid receivers per scheduled TX/frequency');
+if ~isfield(cfg, 'evaluate_final_residual')
+    cfg.evaluate_final_residual = false;
+end
+assert(islogical(cfg.evaluate_final_residual) && isscalar(cfg.evaluate_final_residual), ...
+    'WUST:InvalidInput', 'evaluate_final_residual must be boolean');
 if ~isfield(cfg, 'save_history')
     cfg.save_history = false;
 end

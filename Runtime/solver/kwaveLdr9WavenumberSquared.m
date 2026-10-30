@@ -1,14 +1,12 @@
-function [qEffective,dqDm,metadata] = kwaveLdr9WavenumberSquared( ...
-    soundSpeed,frequencyHz,spacingM,b,d,e,timeStepS,referenceSpeedMps,modelReferenceSpeedMps)
+function [qEffective,dqDs,metadata] = kwaveLdr9WavenumberSquared( ...
+    soundSpeed,frequencyHz,spacingM,b,d,e,timeStepS,referenceSpeedMps)
 %KWAVELDR9WAVENUMBERSQUARED Match the local k-Wave time dispersion with a
 % fixed-coefficient nine-point Helmholtz stencil.  The angular objective is
 % a frozen 8-point Gauss-Legendre average over [0,pi/4].
 
-assert(nargin==9 && ~isempty(modelReferenceSpeedMps), ...
-    'WUST:InvalidInput','A fixed model reference speed is required');
 c=double(soundSpeed);f=double(frequencyHz);h=double(spacingM);
-dt=double(timeStepS);cr=double(referenceSpeedMps);c0=double(modelReferenceSpeedMps);
-if any(c(:)<=0)||f<=0||h<=0||dt<=0||cr<=0||c0<=0
+dt=double(timeStepS);cr=double(referenceSpeedMps);
+if any(c(:)<=0)||f<=0||h<=0||dt<=0||cr<=0
     error('All physical inputs must be positive.');
 end
 omega=2*pi*f;
@@ -48,19 +46,17 @@ end
 Q=-N./D;
 Qp=-(Np.*D-N.*Dp)./(D.*D);
 qEffective=Q./(h*h);
-m=(c0./c).^2;
-a=(cr/c0)*temporalSine;
-dKdm=(h*a)./(cr*dt.*sqrt(m).*sqrt(1-z.*z));
-dqDm=(Qp./(h*h)).*dKdm;
-if any(~isfinite(qEffective(:))|qEffective(:)<=0)|any(~isfinite(dqDm(:)))
+dKds=(2*h*temporalSine)./(dt.*sqrt(1-z.*z));
+dqDs=(Qp./(h*h)).*dKds;
+if any(~isfinite(qEffective(:))|qEffective(:)<=0)|any(~isfinite(dqDs(:)))
     error('LDR-9 produced invalid wavenumber or derivative.');
 end
 if nargout>2
 metadata=struct('mode','kwave-aware-ldr9','quadrature','gauss-legendre-8', ...
     'time_step_s',dt,'reference_speed_mps',cr, ...
-    'model_reference_speed_mps',c0,'q_min',min(qEffective(:)), ...
-    'q_max',max(qEffective(:)),'dqdm_min',min(dqDm(:)), ...
-    'dqdm_max',max(dqDm(:)),'target_K_min',min(K(:)), ...
+    'q_min',min(qEffective(:)), ...
+    'q_max',max(qEffective(:)),'dqds_min',min(dqDs(:)), ...
+    'dqds_max',max(dqDs(:)),'target_K_min',min(K(:)), ...
     'target_K_max',max(K(:)));
 end
 end

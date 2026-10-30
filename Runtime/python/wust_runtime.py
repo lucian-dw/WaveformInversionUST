@@ -165,8 +165,6 @@ def run(request_path, matlab="matlab", timeout_s=None, kwave_toolbox_path=None):
         request_timeout_s=timeout_s,
         process_wall_seconds=time.monotonic() - started,
     )
-    if expected == "wust.reconstruction":
-        result["metadata"]["final_data_residual"] = None
     if time.monotonic() - started >= timeout_s:
         raise RuntimeFailure("time_budget", "Deadline expired before final publication")
     array_file = folder / result["arrays_file"]

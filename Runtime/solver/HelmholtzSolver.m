@@ -20,6 +20,9 @@ classdef HelmholtzSolver
         a0 % PML strength parameter from Chen/Cheng/Feng/Wu 2013 Paper
         L_PML % Length [length] of PML
         % 2) Computed During Constructor
+        cpu_factor
+        assembly_seconds
+        factor_seconds
         HelmholtzEqn % Sparse System of Equations for Helmholtz Equation
         PML % PML factors over identity term of stencil
         V % Complex Velocity [m/s] for Virtual Source Calculation
@@ -55,6 +58,7 @@ classdef HelmholtzSolver
                 max(abs(diff(x)-mean(diff(x))))<mean(diff(x))*1e-7 && ...
                 max(abs(diff(y)-mean(diff(y))))<mean(diff(y))*1e-7, ...
                 'WUST:InvalidInput','Uniform increasing grids required');
+            assemblyTimer = tic;
             obj.backend = char(options.backend);
             % First Set All Input Values to Constructor
             obj.x = x; obj.y = y;
@@ -120,95 +124,43 @@ classdef HelmholtzSolver
                 assert(all(atten(:)==0) && abs(g-1)<1e-10, ...
                     'LDR9 requires zero attenuation and square grid cells');
                 [q,dq]=kwaveLdr9WavenumberSquared(vel,f,h,b,d,e, ...
-                    spec.time_step_s,spec.reference_speed_mps,spec.model_reference_speed_mps);
+                    spec.time_step_s,spec.reference_speed_mps);
                 k=sqrt(q);
-                obj.derivativeSlowness=dq.*(2*spec.model_reference_speed_mps^2./vel);
+                obj.derivativeSlowness=dq;
             end
 
             obj.PML = C;
+            [Dd, Dl, Du, Ld, Ll, Lu, Ud, Ul, Uu] = ...
+                ninePointCoefficients(A, B, C, k, b, d, e, h, g, Nx, Ny);
             if strcmp(obj.backend, 'cpu')
-                % Structures to Form Sparse Matrices
-                rows = zeros(9*(Nx-2)*(Ny-2)+(Nx*Ny-(Nx-2)*(Ny-2)),1);
-                cols = zeros(9*(Nx-2)*(Ny-2)+(Nx*Ny-(Nx-2)*(Ny-2)),1);
-                vals = zeros(9*(Nx-2)*(Ny-2)+(Nx*Ny-(Nx-2)*(Ny-2)),1);
-
-                % Populate Sparse Matrix Structures
+                rows = zeros(9*Nx*Ny, 1);
+                cols = rows;
+                vals = complex(rows);
                 for x_idx = 1:Nx
                     for y_idx = 1:Ny
-                        % Image of Stencil for Helmholtz Equation
-                        if ((x_idx == 1) || (x_idx == Nx) || (y_idx == 1) || (y_idx == Ny))
-                            % Dirichlet Boundary Condition
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx,y_idx);
-                            vals(val_idx) = 1;
-                            val_idx = val_idx + 1;
+                        row = lin_idx(x_idx, y_idx);
+                        if x_idx == 1 || x_idx == Nx || y_idx == 1 || y_idx == Ny
+                            columns = row;
+                            coefficients = 1;
                         else
-                            % 9-Point Stencil
-                            % Center of Stencil
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx,y_idx);
-                            vals(val_idx) = (1-d-e)*C(y_idx,x_idx)*(k(y_idx,x_idx)^2) ...
-                                - b*(A(y_idx,x_idx)+A(y_idx,x_idx-1) + ...
-                                B(y_idx,x_idx)/(g^2)+B(y_idx-1,x_idx)/(g^2))/(h^2);
-                            val_idx = val_idx + 1;
-                            % Left
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx-1,y_idx);
-                            vals(val_idx) = (b*A(y_idx,x_idx-1) - ...
-                                ((1-b)/2)*(B(y_idx,x_idx-1)/(g^2)+B(y_idx-1,x_idx-1)/(g^2)))/(h^2) + ...
-                                (d/4)*C(y_idx,x_idx-1)*(k(y_idx,x_idx-1)^2);
-                            val_idx = val_idx + 1;
-                            % Right
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx+1,y_idx);
-                            vals(val_idx) = (b*A(y_idx,x_idx) - ...
-                                ((1-b)/2)*(B(y_idx,x_idx+1)/(g^2)+B(y_idx-1,x_idx+1)/(g^2)))/(h^2) + ...
-                                (d/4)*C(y_idx,x_idx+1)*(k(y_idx,x_idx+1)^2);
-                            val_idx = val_idx + 1;
-                            % Down
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx,y_idx-1);
-                            vals(val_idx) = (b*B(y_idx-1,x_idx)/(g^2) - ...
-                                ((1-b)/2)*(A(y_idx-1,x_idx)+A(y_idx-1,x_idx-1)))/(h^2) + ...
-                                (d/4)*C(y_idx-1,x_idx)*(k(y_idx-1,x_idx)^2);
-                            val_idx = val_idx + 1;
-                            % Up
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx,y_idx+1);
-                            vals(val_idx) = (b*B(y_idx,x_idx)/(g^2) - ...
-                                ((1-b)/2)*(A(y_idx+1,x_idx)+A(y_idx+1,x_idx-1)))/(h^2) + ...
-                                (d/4)*C(y_idx+1,x_idx)*(k(y_idx+1,x_idx)^2);
-                            val_idx = val_idx + 1;
-                            % Bottom Left
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx-1,y_idx-1);
-                            vals(val_idx) = (((1-b)/2)*(A(y_idx-1,x_idx-1)+B(y_idx-1,x_idx-1)/(g^2)))/(h^2) + ...
-                                (e/4)*C(y_idx-1,x_idx-1)*(k(y_idx-1,x_idx-1)^2);
-                            val_idx = val_idx + 1;
-                            % Bottom Right
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx+1,y_idx-1);
-                            vals(val_idx) = (((1-b)/2)*(A(y_idx-1,x_idx)+B(y_idx-1,x_idx+1)/(g^2)))/(h^2) + ...
-                                (e/4)*C(y_idx-1,x_idx+1)*(k(y_idx-1,x_idx+1)^2);
-                            val_idx = val_idx + 1;
-                            % Top Left
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx-1,y_idx+1);
-                            vals(val_idx) = (((1-b)/2)*(A(y_idx+1,x_idx-1)+B(y_idx,x_idx-1)/(g^2)))/(h^2) + ...
-                                (e/4)*C(y_idx+1,x_idx-1)*(k(y_idx+1,x_idx-1)^2);
-                            val_idx = val_idx + 1;
-                            % Top Right
-                            rows(val_idx) = lin_idx(x_idx,y_idx);
-                            cols(val_idx) = lin_idx(x_idx+1,y_idx+1);
-                            vals(val_idx) = (((1-b)/2)*(A(y_idx+1,x_idx)+B(y_idx,x_idx+1)/(g^2)))/(h^2) + ...
-                                (e/4)*C(y_idx+1,x_idx+1)*(k(y_idx+1,x_idx+1)^2);
-                            val_idx = val_idx + 1;
+                            columns = [row, row-1, row+1, row-Ny, row-Ny-1, row-Ny+1, row+Ny, row+Ny-1, row+Ny+1];
+                            coefficients = [Dd(y_idx,x_idx), Dl(y_idx-1,x_idx), Du(y_idx,x_idx), ...
+                                Ld(y_idx,x_idx-1), Ll(y_idx-1,x_idx-1), Lu(y_idx,x_idx-1), ...
+                                Ud(y_idx,x_idx), Ul(y_idx-1,x_idx), Uu(y_idx,x_idx)];
                         end
+                        ids = val_idx:val_idx+numel(columns)-1;
+                        rows(ids) = row;
+                        cols(ids) = columns;
+                        vals(ids) = coefficients;
+                        val_idx = val_idx + numel(columns);
                     end
                 end
-
-                % Generate Left-Hand Side of Sparse Array
-                obj.HelmholtzEqn = sparse(rows, cols, vals, Nx*Ny, Nx*Ny);
+                used = 1:val_idx-1;
+                obj.HelmholtzEqn = sparse(rows(used), cols(used), vals(used), Nx*Ny, Nx*Ny);
+                obj.assembly_seconds = toc(assemblyTimer);
+                factorTimer = tic;
+                obj.cpu_factor = decomposition(obj.HelmholtzEqn, 'lu');
+                obj.factor_seconds = toc(factorTimer);
             end
             if strcmp(obj.backend, 'gpu')
                 obj.virtualSourceMultiplier = ...
@@ -217,17 +169,25 @@ classdef HelmholtzSolver
 
             % Compute Block LU Factorization on GPU
             if strcmp(obj.backend, 'gpu') % Check if GPU can be used to solve linear system
-                % 1) Form the fixed-stencil block arrays directly on GPU.
-                [Dd, Dl, Du, Ld, Ll, Lu, Ud, Ul, Uu] = ...
-                    assembleBlockTridiagonalsGPU( ...
-                    A, B, C, k, b, d, e, h, g, Nx, Ny);
-                obj.Ld = Ld; obj.Ll = Ll; obj.Lu = Lu;
-                obj.Ud = Ud; obj.Ul = Ul; obj.Uu = Uu;
+                obj.Ld = gpuArray(single(Ld));
+                obj.Ll = gpuArray(single(Ll));
+                obj.Lu = gpuArray(single(Lu));
+                obj.Ud = gpuArray(single(Ud));
+                obj.Ul = gpuArray(single(Ul));
+                obj.Uu = gpuArray(single(Uu));
+                Dd = gpuArray(single(Dd));
+                Dl = gpuArray(single(Dl));
+                Du = gpuArray(single(Du));
+                wait(gpuDevice);
+                obj.assembly_seconds = toc(assemblyTimer);
+                factorTimer = tic;
                 clear Ld Ll Lu Ud Ul Uu;
                 % Two-Step Solution
                 % B) Calculate the Schur Complements and Their Inverses
                 obj.invT = decompBlockLU(obj.Ld, obj.Ll, obj.Lu, ...
                     Dd, Dl, Du, obj.Ud, obj.Ul, obj.Uu);
+                wait(gpuDevice);
+                obj.factor_seconds = toc(factorTimer);
             end
         end
 
@@ -243,12 +203,12 @@ classdef HelmholtzSolver
                 wvfield = applyBlockLU(src, obj.Ld, obj.Ll, obj.Lu, ...
                     obj.Ud, obj.Ul, obj.Uu, obj.invT, adjoint);
             else
-                % Brute-force CPU solution of linear system
+                % Reuse the same LU and its conjugate transpose for every RHS batch.
                 src=double(src); % MATLAB sparse backslash requires double RHS.
                 if adjoint
-                    sol = (obj.HelmholtzEqn')\reshape(src,[Nx*Ny, Nsrcs]);
+                    sol = obj.cpu_factor'\reshape(src,[Nx*Ny, Nsrcs]);
                 else
-                    sol = obj.HelmholtzEqn\reshape(src,[Nx*Ny, Nsrcs]);
+                    sol = obj.cpu_factor\reshape(src,[Nx*Ny, Nsrcs]);
                 end
                 wvfield = reshape(sol, size(src));
             end

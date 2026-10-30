@@ -74,8 +74,13 @@ observations, not before every reconstruct call.
 Speed bounds are positive and ordered. PML and maximum speed update are in m and
 m/s. Batch size and filter order are positive integers. The dimensionless positive
 filter cutoff multiplies `2*f/c0`; zero is identity. `kwave-ldr9` requires explicit
-`dispersion` with `time_step_s`, `reference_speed_mps` and
-`model_reference_speed_mps`. Continuum mode does not use these simulator facts.
+`dispersion` with `time_step_s` and `reference_speed_mps`.
+Continuum mode does not use these simulator facts. The LDR9 helper returns
+the derivative directly with respect to slowness; no model reference speed is needed.
+
+Set `evaluate_final_residual: true` only when an independent final-model residual
+is required. Its oracle/RHS counts and elapsed time are reported separately.
+Default per-update residuals describe the model before that update.
 
 ## Artifacts
 

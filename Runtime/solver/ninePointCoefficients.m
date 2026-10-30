@@ -1,14 +1,6 @@
 function [Dd, Dl, Du, Ld, Ll, Lu, Ud, Ul, Uu] = ...
-    assembleBlockTridiagonalsGPU(A, B, C, k, b, d, e, h, g, Nx, Ny)
-%ASSEMBLEBLOCKTRIDIAGONALSGPU Form the nine block diagonals on the GPU.
-%   The fixed nine-point stencil is mapped directly to the diagonal,
-%   lower-block and upper-block arrays consumed by decompBlockLU.  This
-%   avoids constructing host block arrays from the global sparse matrix.
-
-%   Arithmetic is intentionally performed in double precision before the
-%   final single cast so that this path follows the existing CPU assembly
-%   as closely as possible.
-
+    ninePointCoefficients(A, B, C, k, b, d, e, h, g, Nx, Ny)
+%NINEPOINTCOEFFICIENTS Unique nine-point formula for CPU sparse and GPU block assembly.
 % Downstream arithmetic is intentionally double regardless of the stencil
 % helper's scalar output class.
 b = double(b);
@@ -19,23 +11,23 @@ g = double(g);
 Nx = double(Nx);
 Ny = double(Ny);
 
-Ag = gpuArray(double(A));
-Bg = gpuArray(double(B));
-Cg = gpuArray(double(C));
-kg = gpuArray(double(k));
+Ag = double(A);
+Bg = double(B);
+Cg = double(C);
+kg = double(k);
 k2 = kg .* kg;
 h2 = h * h;
 g2 = g * g;
 
-Dd = complex(zeros(Ny, Nx, 'double', 'gpuArray'));
-Dl = complex(zeros(Ny-1, Nx, 'double', 'gpuArray'));
-Du = complex(zeros(Ny-1, Nx, 'double', 'gpuArray'));
-Ld = complex(zeros(Ny, Nx-1, 'double', 'gpuArray'));
-Ll = complex(zeros(Ny-1, Nx-1, 'double', 'gpuArray'));
-Lu = complex(zeros(Ny-1, Nx-1, 'double', 'gpuArray'));
-Ud = complex(zeros(Ny, Nx-1, 'double', 'gpuArray'));
-Ul = complex(zeros(Ny-1, Nx-1, 'double', 'gpuArray'));
-Uu = complex(zeros(Ny-1, Nx-1, 'double', 'gpuArray'));
+Dd = complex(zeros(Ny, Nx, 'like', C));
+Dl = complex(zeros(Ny-1, Nx, 'like', C));
+Du = complex(zeros(Ny-1, Nx, 'like', C));
+Ld = complex(zeros(Ny, Nx-1, 'like', C));
+Ll = complex(zeros(Ny-1, Nx-1, 'like', C));
+Lu = complex(zeros(Ny-1, Nx-1, 'like', C));
+Ud = complex(zeros(Ny, Nx-1, 'like', C));
+Ul = complex(zeros(Ny-1, Nx-1, 'like', C));
+Uu = complex(zeros(Ny-1, Nx-1, 'like', C));
 
 % Dirichlet boundary rows have a unit diagonal and no off-diagonal terms.
 Dd([1 Ny], :) = 1;
@@ -79,7 +71,4 @@ Uu(y, xu) = ((1-b)/2) .* ...
     (Ag(y+1, xu) + Bg(y, xu+1)./g2) ./ h2 + ...
     (e/4) .* Cg(y+1, xu+1) .* k2(y+1, xu+1);
 
-Dd = single(Dd); Dl = single(Dl); Du = single(Du);
-Ld = single(Ld); Ll = single(Ll); Lu = single(Lu);
-Ud = single(Ud); Ul = single(Ul); Uu = single(Uu);
 end

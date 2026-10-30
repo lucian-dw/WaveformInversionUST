@@ -60,10 +60,14 @@ fprintf('%s FWI loss %.6g -> %.6g\n', backend, loss, final_loss);
 short = cfg;
 short.max_updates = 1;
 short.save_history = true;
+short.evaluate_final_residual = true;
 result = wust_reconstruct(obs, initial, short);
 assert(strcmp(result.completion.reason,'caller_truncated_schedule'));
 assert(result.planned_schedule_length == 4 && result.completed_updates == 1);
 assert(isequal(size(result.history_mps), [31,31,2]));
+assert(result.final_data_residual.oracle_calls == numel(obs.frequencies_hz));
+assert(result.final_data_residual.forward_rhs == numel(obs.tx_index)*numel(obs.frequencies_hz));
+assert(isfinite(result.final_data_residual.relative));
 zero = cfg;
 zero.max_updates = 0;
 result = wust_reconstruct(obs, initial, zero);
@@ -93,7 +97,7 @@ bad.Y(:) = realmax/2;
 reject(@() wust_reconstruct(bad,initial,cfg), 'WUST:NumericalFailure');
 cfg.wavenumber = 'kwave-ldr9';
 cfg.dispersion = struct('time_step_s',2e-8, ...
-    'reference_speed_mps',1700,'model_reference_speed_mps',1500);
+    'reference_speed_mps',1700);
 check_derivative(initial, obs, cfg, direction, step, tolerance);
 end
 

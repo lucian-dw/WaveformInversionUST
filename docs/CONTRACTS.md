@@ -46,8 +46,12 @@ The virtual source uses the full mass stencil; the adjoint applies its conjugate
 transpose. Stencil speed bounds remain frozen while differentiating.
 
 Continuum uses $q=(2\pi f/c)^2$. kwave-ldr9 additionally requires explicit original
-simulator time_step_s, reference_speed_mps and model_reference_speed_mps. They
+simulator time_step_s and reference_speed_mps. They
 cannot be inferred from decimated RF or clinical data.
+
+The CPU owns one `decomposition(H, 'lu')` per model/frequency. Forward,
+adjoint and curvature batches reuse it, including its conjugate transpose.
+CPU sparse assembly and GPU block assembly consume `ninePointCoefficients`.
 
 ## Update and schedule
 
