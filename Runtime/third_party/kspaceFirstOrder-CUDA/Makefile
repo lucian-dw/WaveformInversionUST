@@ -104,8 +104,7 @@ SZIP_DIR = $(EBROOTSZIP)
 
 ############################### Common flags ###################################
 
-# Replace tabs by spaces
-.RECIPEPREFIX += 
+.DEFAULT_GOAL := all
 
 # What CUDA GPU architectures to include in the binary
 # Override for the deployment GPU; used by both compilation and device linking.
@@ -303,17 +302,17 @@ all: $(TARGET)
 # Link target
 # Fork: retain the selected architecture at device link, not nvcc's default sm_52.
 $(TARGET): $(DEPENDENCIES)
-  $(CXX) $(CUDA_ARCH) $(LDFLAGS) $(DEPENDENCIES) $(LDLIBS) -o $@
+	$(CXX) $(CUDA_ARCH) $(LDFLAGS) $(DEPENDENCIES) $(LDLIBS) -o $@
 
 # Compile CPU units
 %.o: %.cpp
-  $(CXX) $(CXXFLAGS) -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 # Compile CUDA units
 %.o: %.cu
-  $(CXX) $(CXXFLAGS) $(CUDA_ARCH) -o $@ -c $<
+	$(CXX) $(CXXFLAGS) $(CUDA_ARCH) -o $@ -c $<
 
 # Clean repository
-.PHONY: clean
+.PHONY: all clean
 clean:
-  rm -f $(DEPENDENCIES) $(TARGET)
+	rm -f $(DEPENDENCIES) $(TARGET)

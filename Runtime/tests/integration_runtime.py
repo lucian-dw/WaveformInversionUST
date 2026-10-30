@@ -106,6 +106,67 @@ def numerical_config(backend="cpu"):
     }
 
 
+def check_rf_preparation(folder, matlab):
+    """Exercise public prepare dispatch against an independent dt-weighted DFT."""
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    time_s = 3e-6 + np.arange(128) * 1e-7
+    frequencies = np.array([2e5, 1e5])
+    tx = np.array([[-0.003, -0.002], [0.003, 0.002]])
+    rx = np.array([[-0.002, 0.003], [0.002, -0.003], [0.004, 0.0]])
+    pressure = np.cos(2 * np.pi * 1.5e5 * time_s)[:, None, None] * (
+        1 + np.arange(6).reshape(1, 3, 2)
+    )
+    pressure[:, 0, 0] = 0  # A valid zero observation stays valid.
+    pressure[:, 1, 1] = np.nan  # A masked channel must never enter the DFT.
+    mask = np.ones((2, 3), bool)
+    mask[1, 1] = False
+    grid = {
+        "shape_yx": [23, 27],
+        "origin_yx_m": [-0.0115, -0.02025],
+        "spacing_yx_m": [0.001, 0.0015],
+        "origin_kind": "pixel_edge",
+    }
+    write_artifact(
+        folder / "rf.json",
+        "wust.rf",
+        {"data_units": "Pa", "measurement_provenance": "analytic_RF_fixture"},
+        {"pressure": pressure, "time_s": time_s, "tx_xy_m": tx, "rx_xy_m": rx},
+        {
+            "pressure": "time,rx,tx",
+            "time_s": "time",
+            "tx_xy_m": "tx,xy",
+            "rx_xy_m": "rx,xy",
+        },
+        {"pressure": "Pa", "time_s": "s", "tx_xy_m": "m", "rx_xy_m": "m"},
+    )
+    request = {
+        "schema": "wust.request",
+        "schema_version": 2,
+        "operation": "prepare",
+        "input_manifest": str(folder / "rf.json"),
+        "output_manifest": str(folder / "prepared.json"),
+        "config": {
+            "grid": grid,
+            "frequencies_hz": frequencies.tolist(),
+            "c_geom_mps": 1500,
+            "phase_correction": "none",
+            "mask": mask.tolist(),
+        },
+    }
+    path = folder / "request.json"
+    path.write_text(json.dumps(request))
+    run(path, matlab, timeout_s=180)
+    doc, arrays = read_artifact(folder / "prepared.json", "wust.measurements")
+    kernel = np.exp(-2j * np.pi * np.sort(frequencies)[:, None] * time_s) * 1e-7
+    expected = np.einsum("ft,trq->qrf", kernel, np.nan_to_num(pressure))
+    np.testing.assert_allclose(arrays["Y"], expected, rtol=2e-6, atol=1e-13)
+    np.testing.assert_array_equal(arrays["mask"], np.repeat(mask[..., None], 2, axis=2))
+    assert doc["metadata"]["grid"] == grid
+    assert doc["metadata"]["data_units"] == "Pa*s"
+    return float(np.linalg.norm(arrays["Y"] - expected) / np.linalg.norm(expected))
+
+
 def check_reconstruction(metadata, speed, *, backend, expected_updates=2):
     assert speed.shape == (23, 27) and speed.dtype == np.float64
     assert np.isfinite(speed).all() and (speed > 0).all()
@@ -126,10 +187,15 @@ def main():
     parser.add_argument("--matlab", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--backend", choices=["cpu", "gpu"], default="cpu")
+    parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument(
         "--fixture", type=Path, help="Reuse a prepared coherent fixture directory"
     )
     args = parser.parse_args()
+    if args.prepare_only:
+        error = check_rf_preparation(args.out, args.matlab)
+        print(json.dumps({"passed": True, "rf_prepare_relative_error": error}))
+        return
     folder = args.out.resolve()
     prepared = time.monotonic()
     if args.fixture is None:

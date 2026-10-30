@@ -10,8 +10,7 @@ try
             result=wust_prepare_observations(input);
         case 'prepare'
             rf=wust_read_artifact(req.input_manifest,'wust.rf');
-            cfg=req.config;geo=wust_geometry(cfg.grid,rf.tx_xy_m,rf.rx_xy_m);
-            cfg=rmfield(cfg,'grid');cfg.x_m=geo.x_m;cfg.y_m=geo.y_m;
+            cfg=req.config;
             if strcmp(rf.data_units,'Pa'),cfg.data_units='Pa*s';else,cfg.data_units=rf.data_units;end
             cfg.measurement_provenance=rf.measurement_provenance;
             result=wust_prepare(rf,cfg);

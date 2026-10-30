@@ -200,3 +200,15 @@ P1-P6 is complete at the declared small numerical/interface validation scope.
 Next: maintainer review of the two local branches. Larger acquisition performance
 and clinical validity are not established by these gates. No remote push or merge
 has been performed as part of this refactor.
+
+## Final taskbook F01
+
+- Kept the explicit grid through public RF prepare dispatch. Removed duplicate
+  derived-coordinate injection. Restored TAB recipes, default `all`, and phony
+  `all` in the native Makefile.
+- A100 public `integration_runtime.py --prepare-only`: passed, independent
+  dt-weighted DFT relative error 2.51010432160517e-08. Includes a nonzero time
+  origin, a valid zero trace and a masked NaN trace.
+- A100 `make -B -j4` with CUDA 11.4/HDF5 and default target: compiled and linked
+  successfully. This is build evidence, not the later native runtime gate.
+- Next: F02-F06 data/discretization repairs, then F07 WUST update definitions.

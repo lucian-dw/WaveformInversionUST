@@ -99,6 +99,11 @@ not a source-code identity. Invalid channels are zeroed before arithmetic;
 valid zero pressure remains valid data.
 
 `wust_prepare_observations` owns geometry, sorting, conjugation and masks.
+
+RF `prepare` requests pass the explicit `grid` unchanged to `wust_prepare`.
+Derived coordinates are not additional configuration fields. The public path
+can be checked independently of reconstruction with
+`python Runtime/tests/integration_runtime.py --matlab /path/to/matlab --out /tmp/wust-rf-check --prepare-only`.
 Canonical measurements have `Y[tx,rx,frequency]`, matching mask, strictly sorted
 frequencies, physical positions and one-based sampling indices. Derived grid
 coordinates are computed from grid, not stored as duplicate protocol arrays.
