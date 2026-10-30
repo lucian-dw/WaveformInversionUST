@@ -55,17 +55,36 @@ CPU sparse assembly and GPU block assembly consume `ninePointCoefficients`.
 
 ## Update and schedule
 
-The loop restarts nonlinear CG at frequency changes, uses clipped PR/FR beta,
-then a linearized curvature step with frozen source scale. Damping, a speed-step
-cap, bounds and an update mask constrain the candidate. Optional ringing removal
-filters the gradient. This is not monotone line-search FWI and adds no explicit
-quadratic image regularizer.
+For ROI mask $M$ and optional frequency filter $F$, the preconditioned gradient
+is $z_k=MFMg_k$. Within a frequency, clipped preconditioned PR/FR uses
+
+$$
+\beta_k=\min\left\{\max\left(\frac{g_k^T(z_k-z_{k-1})}{g_{k-1}^Tz_{k-1}},0\right),
+\frac{g_k^Tz_k}{g_{k-1}^Tz_{k-1}}\right\},\qquad d_k=-z_k+\beta_kd_{k-1}.
+$$
+
+Frequency changes restart CG. A non-descent direction also restarts; a zero
+direction takes a zero step and advances the schedule. Curvature freezes the
+current fitted source scales and explicitly samples admitted receivers.
+Projection acts on slowness before inversion:
+
+$$
+s^+=\operatorname{clip}(s+\eta\alpha d,1/c_{\rm hi},1/c_{\rm lo}),
+\quad c^+=1/s^+,
+$$
+
+where the local speed interval intersects global bounds with $c\pm\Delta c$.
+Outside the ROI the model is unchanged. This is not monotone line-search FWI
+and adds no explicit quadratic image regularizer.
 
 A null/omitted schedule means each canonical frequency once. The complete Hz plan
 is resolved first, then truncated by max_updates. Every entry is one model update.
 Each loss belongs to the **pre-update model at that entry's frequency**.
-A final-model residual is null unless explicitly computed; this runtime does not
-compute one.
+A final-model residual is null by default. Explicit
+`evaluate_final_residual: true` evaluates it at the last executed frequency
+and records additional oracle/RHS counts and time separately. Zero observation
+energy yields a null relative residual with `zero_observation_energy` status;
+the absolute residual is still reported.
 
 Schedule completion is completion, not convergence. The runtime supports update
 count and a hard elapsed deadline; it rejects numerical stopping thresholds and

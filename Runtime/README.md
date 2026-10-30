@@ -75,7 +75,7 @@ test_native_pipeline('/absolute/new/launcher', '/absolute/new/native-check', 0);
 ~~~
 
 Full-size performance campaigns are in [research archive](../docs/research_index.md).
-When running this gate with MATLAB -batch, append exit(0) after the test to make
-successful batch termination explicit; assertion failures still abort before it.
+When running this gate with MATLAB -batch, check both the report and process exit
+status; numerical assertions alone do not certify successful process cleanup.
 [examples](../examples/simulate_and_reconstruct.m) demonstrates explicit simulation,
 RF preparation and reconstruction; it is not a required CI stage.

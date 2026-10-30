@@ -19,7 +19,24 @@ sys.path.insert(0, str(ROOT / "Runtime/python"))
 import contracts
 import process
 import wust_runtime as runtime
-from wust_io import atomic_json, read_artifact, read_json, write_artifact
+from wust_io import atomic_json, read_artifact, read_json, publish_result
+
+
+def process_states():
+    """Query all processes so an absent PID is not a failed ps command."""
+    query = subprocess.run(
+        ["ps", "-eo", "pid=,stat="], capture_output=True, text=True, check=True
+    )
+    return dict(
+        line.split(None, 1) for line in query.stdout.splitlines() if line.strip()
+    )
+
+
+def require_process_query():
+    try:
+        process_states()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise unittest.SkipTest(f"Process-state query unavailable: {exc}") from exc
 
 
 def fixture(folder):
@@ -60,7 +77,7 @@ def fixture(folder):
         "tx_xy_m": "m",
         "rx_xy_m": "m",
     }
-    write_artifact(
+    publish_result(
         folder / "input.json", "wust.frequency_input", meta, arrays, axes, units
     )
     req = {
@@ -160,7 +177,7 @@ class ContractTests(unittest.TestCase):
             a["mask"][0, 0] = False
             a["pressure"][:, 0, 0] = np.nan
             a["pressure"][:, 1, 0] = 0
-            write_artifact(
+            publish_result(
                 folder / "valid.json", doc["schema"], doc["metadata"], a, axes, units
             )
             _, b = read_artifact(folder / "valid.json")
@@ -196,7 +213,7 @@ class ContractTests(unittest.TestCase):
                 "rx_xy_m": "m",
                 "source_pressure": "Pa",
             }
-            write_artifact(
+            publish_result(
                 folder / "simulation.json",
                 "wust.simulation_input",
                 {},
@@ -217,11 +234,11 @@ class ContractTests(unittest.TestCase):
                 "rx_xy_m": "rx,xy",
             }
             units = {"pressure": "Pa", "time_s": "s", "tx_xy_m": "m", "rx_xy_m": "m"}
-            write_artifact(
+            publish_result(
                 folder / "rf.json", "wust.rf", {"data_units": "Pa"}, rf, axes, units
             )
             axes["pressure"] = "frequency,tx,rx"
-            write_artifact(
+            publish_result(
                 folder / "bad.json",
                 "wust.rf",
                 {"data_units": "Pa"},
@@ -261,6 +278,7 @@ class ContractTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "POSIX process-group supervisor")
     def test_launcher_termination_cleans_child(self):
+        require_process_query()
         with tempfile.TemporaryDirectory() as tmp:
             pidfile = Path(tmp) / "child"
             child = f"import os,time;from pathlib import Path;Path({str(pidfile)!r}).write_text(str(os.getpid()));time.sleep(60)"
@@ -277,12 +295,7 @@ class ContractTests(unittest.TestCase):
                 p.send_signal(signal.SIGTERM)
                 p.wait(timeout=5)
                 self.assertNotEqual(p.returncode, 0)
-                status = subprocess.run(
-                    ["ps", "-p", str(pid), "-o", "stat="],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout.strip()
+                status = process_states().get(str(pid), "")
                 self.assertTrue(not status or status.startswith("Z"))
             finally:
                 if p.poll() is None:
@@ -291,6 +304,7 @@ class ContractTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "POSIX process-group supervisor")
     def test_timeout_terminates_descendant(self):
+        require_process_query()
         with tempfile.TemporaryDirectory() as tmp:
             pidfile = Path(tmp) / "pid"
             grandchild = "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)"
@@ -299,12 +313,7 @@ class ContractTests(unittest.TestCase):
                 process.execute([sys.executable, "-c", parent], 0.5)
             pid = int(pidfile.read_text())
             time.sleep(0.1)
-            status = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "stat="],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout.strip()
+            status = process_states().get(str(pid), "")
             self.assertTrue(
                 not status or status.startswith("Z"),
                 f"Descendant still running: {status}",

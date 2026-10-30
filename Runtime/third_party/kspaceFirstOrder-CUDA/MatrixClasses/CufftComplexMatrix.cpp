@@ -403,6 +403,12 @@ void CufftComplexMatrix::createC2RFftPlan1DZ(const DimensionSizes& outMatrixDims
  */
 void CufftComplexMatrix::destroyAllPlansAndStaticData()
 {
+  const cufftResult status = closeAllPlans();
+  if (status != CUFFT_SUCCESS) throwCufftException(status, kErrFmtDestroyR2CFftPlanND);
+}
+
+cufftResult CufftComplexMatrix::closeAllPlans() noexcept
+{
   CufftPlan* plans[] = {&sR2CFftPlanND, &sC2RFftPlanND, &sR2CFftPlan1DX,
                        &sR2CFftPlan1DY, &sR2CFftPlan1DZ, &sC2RFftPlan1DX,
                        &sC2RFftPlan1DY, &sC2RFftPlan1DZ};
@@ -412,7 +418,7 @@ void CufftComplexMatrix::destroyAllPlansAndStaticData()
     const cufftResult status = plan->close();
     if (firstError == CUFFT_SUCCESS) firstError = status;
   }
-  if (firstError != CUFFT_SUCCESS) throwCufftException(firstError, kErrFmtDestroyR2CFftPlanND);
+  return firstError;
 }// end of destroyAllPlansAndStaticData
 //----------------------------------------------------------------------------------------------------------------------
 

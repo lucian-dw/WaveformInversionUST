@@ -14,7 +14,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Runtime/python"))
 from process import execute
-from wust_io import read_artifact, write_artifact
+from wust_io import read_artifact, publish_result
 from wust_runtime import quote, run
 
 
@@ -48,7 +48,7 @@ def create_fixture(folder, matlab):
         "spectrum_normalization": "unknown",
         "measurement_provenance": "coherent_Helmholtz_fixture",
     }
-    write_artifact(
+    publish_result(
         folder / "input.json",
         "wust.frequency_input",
         metadata,
@@ -79,7 +79,7 @@ def create_fixture(folder, matlab):
     initial = np.full((23, 27), 1500.0)
     update = np.zeros_like(initial, dtype=bool)
     update[5:-5, 5:-5] = True
-    write_artifact(
+    publish_result(
         folder / "initial.json",
         "wust.initial_model",
         {},
@@ -127,7 +127,7 @@ def check_rf_preparation(folder, matlab):
         "spacing_yx_m": [0.001, 0.0015],
         "origin_kind": "pixel_edge",
     }
-    write_artifact(
+    publish_result(
         folder / "rf.json",
         "wust.rf",
         {"data_units": "Pa", "measurement_provenance": "analytic_RF_fixture"},

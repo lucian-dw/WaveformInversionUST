@@ -51,149 +51,28 @@ void __global__ triDiagMat(cuComplex const * const Ad,
 	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (row_idx < size && col_idx < size) {
         if (row_idx == col_idx) {
-            A[row_idx + size*col_idx] = Ad[row_idx];
+            A[row_idx + size_t(size)*col_idx] = Ad[row_idx];
         } else if (row_idx == col_idx+1) {
-            A[row_idx + size*col_idx] = Al[col_idx];
+            A[row_idx + size_t(size)*col_idx] = Al[col_idx];
         } else if (row_idx == col_idx-1) {
-            A[row_idx + size*col_idx] = Au[row_idx];
+            A[row_idx + size_t(size)*col_idx] = Au[row_idx];
         } else {
-            A[row_idx + size*col_idx] = make_cuFloatComplex(0,0);
+            A[row_idx + size_t(size)*col_idx] = make_cuFloatComplex(0,0);
         }
     }
 }
 
 /* Device code - Copy Interior of Matrix */
-void __global__ copyInterior(cuComplex const * const A,
-                             cuComplex * const B, int const N)
-{
-    /* Calculate the global linear index, assuming a 1-d grid. */
-    unsigned int const row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row_idx < N && col_idx < N) {
-        // Border
-        if ( (row_idx == 0) || (row_idx == N-1) ||
-             (col_idx == 0) || (col_idx == N-1) ) {
-            B[row_idx + N*col_idx] = make_cuFloatComplex(0,0);
-        }
-        // Interior
-        else {
-            B[row_idx + N*col_idx] = A[row_idx + N*col_idx];
-        }
-    }
-}
+
 
 /* Device code - Initialize Interior Identity Matrix */
-void __global__ initializeIdentity(cuComplex * const A, int const N)
-{
-    /* Calculate the global linear index, assuming a 1-d grid. */
-    unsigned int const row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row_idx < N && col_idx < N) {
-        // Border
-        if ( (row_idx != 0) && (row_idx != N-1) && (row_idx == col_idx) ) {
-            A[row_idx + N*col_idx] = make_cuFloatComplex(1,0);
-        }
-        // Interior
-        else {
-            A[row_idx + N*col_idx] = make_cuFloatComplex(0,0);
-        }
-    }
-}
+
 
 /* Device code - Tridiagonal Matrix Multiply from Left */
-void __global__ triDiagMultLeftPlusD(cuComplex const * const A,
-                                     cuComplex const * const Bd,
-                                     cuComplex const * const Bl,
-                                     cuComplex const * const Bu,
-                                     cuComplex const * const Dd,
-                                     cuComplex const * const Dl,
-                                     cuComplex const * const Du,
-                                     cuComplex * const C,
-                                     int const size)
-{
-    /* Shared memory for loading A from global memory */
-    __shared__ cuComplex sA[threadsPerBlockY][threadsPerBlockX+2];
-    /* Calculate the global linear index, assuming a 1-d grid. */
-    unsigned int const row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row_idx < size && col_idx < size) {
-        // Regular Entries
-        sA[threadIdx.y][threadIdx.x+1] = A[row_idx +size*col_idx];
-        // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.x == 0) && (row_idx != 0) )
-            sA[threadIdx.y][threadIdx.x] = A[row_idx-1 + size*col_idx];
-        else if ( (threadIdx.x == blockDim.x-1) && (row_idx != size-1) )
-            sA[threadIdx.y][threadIdx.x+2] = A[row_idx+1 + size*col_idx];
-        __syncthreads();
-        // Additional Tri-Diagonal D Input
-        cuComplex D = make_cuFloatComplex(0,0);
-        if (row_idx < size && col_idx < size) {
-            if (row_idx == col_idx) {
-                D = Dd[row_idx];
-            } else if (row_idx == col_idx+1) {
-                D = Dl[col_idx];
-            } else if (row_idx == col_idx-1) {
-                D = Du[row_idx];
-            }
-        }
-        // Actual Tridiagonal Matrix Multiply
-        if (row_idx == 0) {
-            C[row_idx + size*col_idx] = D -
-                (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
-                Bu[row_idx]*sA[threadIdx.y][threadIdx.x+2]);
-        } else if (row_idx == size-1) {
-            C[row_idx + size*col_idx] = D -
-                (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
-                Bl[row_idx-1]*sA[threadIdx.y][threadIdx.x]);
-        } else {
-            C[row_idx + size*col_idx] = D -
-                (Bd[row_idx]*sA[threadIdx.y][threadIdx.x+1] +
-                Bl[row_idx-1]*sA[threadIdx.y][threadIdx.x] +
-                Bu[row_idx]*sA[threadIdx.y][threadIdx.x+2]);
-        }
-    }
-}
+
 
 /* Device code - Tridiagonal Matrix Multiply from Right */
-void __global__ triDiagMultRight(cuComplex const * const A,
-                                 cuComplex const * const Bd,
-                                 cuComplex const * const Bl,
-                                 cuComplex const * const Bu,
-                                 cuComplex * const C,
-                                 int const numRows,
-                                 int const numCols)
-{
-    /* Shared memory for loading A from global memory */
-    __shared__ cuComplex sA[threadsPerBlockX][threadsPerBlockY+2];
-    /* Calculate the global linear index, assuming a 1-d grid. */
-    unsigned int const row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int const col_idx = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row_idx < numRows && col_idx < numCols) {
-        // Regular Entries
-        sA[threadIdx.x][threadIdx.y+1] = A[row_idx + numRows*col_idx];
-        // Entries at the Edge of Each Block of Threads
-        if ( (threadIdx.y == 0) && (col_idx != 0) )
-            sA[threadIdx.x][threadIdx.y] = A[row_idx + numRows*(col_idx-1)];
-        else if ( (threadIdx.y == blockDim.y-1) && (col_idx != numCols-1) )
-            sA[threadIdx.x][threadIdx.y+2] = A[row_idx + numRows*(col_idx+1)];
-        __syncthreads();
-        // Actual Tridiagonal Matrix Multiply
-        if (col_idx == 0) {
-            C[row_idx + numRows*col_idx] =
-                Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
-                Bl[col_idx]*sA[threadIdx.x][threadIdx.y+2];
-        } else if (col_idx == numCols-1) {
-            C[row_idx + numRows*col_idx] =
-                Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
-                Bu[col_idx-1]*sA[threadIdx.x][threadIdx.y];
-        } else {
-            C[row_idx + numRows*col_idx] =
-                Bd[col_idx]*sA[threadIdx.x][threadIdx.y+1] +
-                Bu[col_idx-1]*sA[threadIdx.x][threadIdx.y] +
-                Bl[col_idx]*sA[threadIdx.x][threadIdx.y+2];
-        }
-    }
-}
+
 
 /* Fuse A*U and D-L*(A*U), avoiding a full Ny-by-Ny scratch round trip. */
 void __global__ schurUpdateFused(cuComplex const * const A,
@@ -225,7 +104,7 @@ void __global__ schurUpdateFused(cuComplex const * const A,
         int const globalCol = colStart + tileCol - 1;
         tile[index] = (globalRow >= 0 && globalRow < size &&
                        globalCol >= 0 && globalCol < size)
-            ? A[globalRow + size * globalCol]
+            ? A[globalRow + size_t(size)* globalCol]
             : make_cuFloatComplex(0, 0);
     }
     __syncthreads();
@@ -282,7 +161,7 @@ void __global__ schurUpdateFused(cuComplex const * const A,
     if (row < size - 1) {
         value -= Lu[row] * rightPlus;
     }
-    T[row + size * col] = value;
+    T[row + size_t(size)* col] = value;
 }
 
 void __global__ initializeIdentityPages(cuComplex * const pages,
@@ -295,7 +174,7 @@ void __global__ initializeIdentityPages(cuComplex * const pages,
     if (index < total) {
         int const page = index / interior;
         int const row = index - page * interior + 1;
-        pages[static_cast<size_t>(page) * size * size + row + size * row] =
+        pages[static_cast<size_t>(page) * size_t(size)* size + row + size_t(size)* row] =
             make_cuFloatComplex(1, 0);
     }
 }
@@ -473,7 +352,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
         USCT_CUSOLVER_CHECK(cusolverDnCgetrf(cusolverH, Ny-2, Ny-2,
             &d_T[Ny+1], Ny, (cuComplex *)d_work, d_Ipiv, &d_factorInfo[page]));
         USCT_CUSOLVER_CHECK(cusolverDnCgetrs(cusolverH, CUBLAS_OP_N, Ny-2, Ny-2,
-            &d_T[Ny+1], Ny, d_Ipiv, &d_invT[Ny*Ny*page+Ny+1], Ny, &d_solveInfo[page]));
+            &d_T[Ny+1], Ny, d_Ipiv, &d_invT[size_t(Ny)*Ny*page+Ny+1], Ny, &d_solveInfo[page]));
     };
 
     /* Initialize all inverse pages once, then run the serial recurrence. */
@@ -491,12 +370,12 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
     for (int x_idx = 1; x_idx < Nx; x_idx++) {
         invertPage(x_idx-1);
         schurUpdateFused<<<dimGridBP, dimBlockBP, schurSharedBytes>>>(
-            &d_invT[Ny*Ny*(x_idx-1)],
-            &d_Ld[Ny*(x_idx-1)], &d_Ll[(Ny-1)*(x_idx-1)],
-            &d_Lu[(Ny-1)*(x_idx-1)], &d_Ud[Ny*(x_idx-1)],
-            &d_Ul[(Ny-1)*(x_idx-1)], &d_Uu[(Ny-1)*(x_idx-1)],
-            &d_Dd[Ny*x_idx], &d_Dl[(Ny-1)*x_idx],
-            &d_Du[(Ny-1)*x_idx], d_T, Ny);
+            &d_invT[size_t(Ny)*Ny*(x_idx-1)],
+            &d_Ld[size_t(Ny)*(x_idx-1)], &d_Ll[size_t(Ny-1)*(x_idx-1)],
+            &d_Lu[size_t(Ny-1)*(x_idx-1)], &d_Ud[size_t(Ny)*(x_idx-1)],
+            &d_Ul[size_t(Ny-1)*(x_idx-1)], &d_Uu[size_t(Ny-1)*(x_idx-1)],
+            &d_Dd[size_t(Ny)*x_idx], &d_Dl[size_t(Ny-1)*x_idx],
+            &d_Du[size_t(Ny-1)*x_idx], d_T, Ny);
         USCT_KERNEL_CHECK();
     }
     invertPage(Nx-1);

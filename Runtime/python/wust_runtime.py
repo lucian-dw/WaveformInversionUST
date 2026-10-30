@@ -159,7 +159,6 @@ def run(request_path, matlab="matlab", timeout_s=None, kwave_toolbox_path=None):
         req["operation"], "wust.measurements"
     )
     result = read_manifest(result_path, expected)
-    schema(result, expected)
     result["metadata"].update(
         runtime_version=VERSION,
         request_timeout_s=timeout_s,

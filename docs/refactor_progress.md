@@ -245,3 +245,22 @@ has been performed as part of this refactor.
 - A100 CPU runtime test passed after these changes: continuum FD 3.46637e-10,
   LDR9 FD 1.97022e-10; multi-batch and four-update checks passed.
 - Next: F14 named CUDA legacy deletion and 64-bit address products.
+
+## Final taskbook F14-F15 and F18
+
+- Deleted only the legacy factors branch and four unused CUDA kernels; retained
+  the executing forward/adjoint recurrences. Global page/source offset products
+  begin in size_t. A100 MEX rebuilt and GPU runtime assertions passed.
+- Eight FFT plans close through the existing owners, returning the first cuFFT
+  status. Normal compute reports close errors; destructor uses noexcept closure,
+  then releases storage before cudaDeviceReset. Native make -B compiled/linked.
+- Formatted the 32 maintained MATLAB files into one-action-per-line code; kept
+  third-party formatting unchanged. Formatter naming/copyright/line-width
+  preferences were not used to rename mathematical symbols.
+- GPU runtime rerun exited 0: continuum FD 1.112e-3, LDR9 FD 4.30214e-4.
+  Native comparison /tmp/usct_final_f21_native passed: RF 1.7749e-6,
+  frequency 8.0549e-7, remote MATLAB_SHELL_EXIT=0. Earlier direct SSH invocations
+  returned 255 after printing passed; they were not counted as process success.
+- Codec uses publish_result and direct dataset reads. Transport tests:
+  11 passed, 8 subtests. Process-state tests now require successful ps queries.
+- Next: F20 archive progress, then F21/F22 complete suites and public integration.

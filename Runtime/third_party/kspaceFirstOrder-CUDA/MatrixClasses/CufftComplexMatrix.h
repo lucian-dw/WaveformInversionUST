@@ -157,6 +157,7 @@ class CufftComplexMatrix : public ComplexMatrix
      * @throw std::runtime_error - If the plan can't be destroyed.
      */
     static void destroyAllPlansAndStaticData();
+    static cufftResult closeAllPlans() noexcept;
 
     /**
      * @brief Compute forward out-of-place ND (2D/3D) Real-to-Complex transform.

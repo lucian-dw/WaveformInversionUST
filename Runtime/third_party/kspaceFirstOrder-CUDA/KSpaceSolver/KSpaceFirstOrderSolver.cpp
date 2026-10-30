@@ -178,7 +178,7 @@ KSpaceFirstOrderSolver::KSpaceFirstOrderSolver()
 KSpaceFirstOrderSolver::~KSpaceFirstOrderSolver()
 {
   // Delete CUDA FFT plans and related data
-  CufftComplexMatrix::destroyAllPlansAndStaticData();
+  CufftComplexMatrix::closeAllPlans();
 
   // Free memory
   freeMemory();
@@ -470,6 +470,8 @@ void KSpaceFirstOrderSolver::compute()
   {
     writeOutputDataInfo();
     mParameters.getOutputFile().close();
+    // Normal close reports errors; destructor retries idempotently without throwing.
+    CufftComplexMatrix::destroyAllPlansAndStaticData();
 
     Logger::log(Logger::LogLevel::kBasic, kOutFmtElapsedTime, mPostProcessingTime.getElapsedTime());
     }

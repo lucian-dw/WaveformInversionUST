@@ -67,7 +67,7 @@ void __global__ applyL(cuComplex const * __restrict__ SRC,
 	unsigned int const y_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (y_idx < Ny && src_idx < numSources) {
         /* Indexing */
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = u[row_idx - Ny];
         // Entries at the Edge of Each Block of Threads
@@ -78,21 +78,21 @@ void __global__ applyL(cuComplex const * __restrict__ SRC,
     }
     __syncthreads();
     if (y_idx < Ny && src_idx < numSources) {
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
-                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + size_t(Ny)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Lu[y_idx + size_t(Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
-                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y]);
+            tmp[y_idx + size_t(Ny)*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + size_t(Ny)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Ll[y_idx-1 + size_t(Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y]);
         } else {
-            tmp[y_idx + Ny*src_idx] = SRC[row_idx] -
-                (Ld[y_idx + Ny*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
-                Ll[y_idx-1 + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y] +
-                Lu[y_idx + (Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] = SRC[row_idx] -
+                (Ld[y_idx + size_t(Ny)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+1] +
+                Ll[y_idx-1 + size_t(Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y] +
+                Lu[y_idx + size_t(Ny-1)*(x_idx-1)]*su[threadIdx.x][threadIdx.y+2]);
         }
     }
 }
@@ -113,7 +113,7 @@ void applyInvTpostL(cublasHandle_t handle,
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, noTranspose, noTranspose,
                   Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
-                  &beta, &u[Ny*x_idx], Nx*Ny)); //u[y_idx + Ny*x_idx + Nx*Ny*src_idx] = res
+                  &beta, &u[size_t(Ny)*x_idx], Nx*Ny)); //u[y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx] = res
 }
 
 /* Device code - Apply U Block */
@@ -132,7 +132,7 @@ void __global__ applyU(cuComplex const * __restrict__ Ud,
 	unsigned int const y_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (y_idx < Ny && src_idx < numSources) {
         /* Indexing */
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = u[row_idx + Ny];
         // Entries at the Edge of Each Block of Threads
@@ -143,21 +143,20 @@ void __global__ applyU(cuComplex const * __restrict__ Ud,
     }
     __syncthreads();
     if (y_idx < Ny && src_idx < numSources) {
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] =
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
-                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] =
+                (Ud[y_idx + size_t(Ny)*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Uu[y_idx + size_t(Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
-            tmp[y_idx + Ny*src_idx] =
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
-                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y]);
+            tmp[y_idx + size_t(Ny)*src_idx] =
+                (Ud[y_idx + size_t(Ny)*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Ul[y_idx-1 + size_t(Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y]);
         } else {
-            tmp[y_idx + Ny*src_idx] =
-                (Ud[y_idx + Ny*x_idx]*su[threadIdx.x][threadIdx.y+1] +
-                Ul[y_idx-1 + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y] +
-                Uu[y_idx + (Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] =
+                (Ud[y_idx + size_t(Ny)*x_idx]*su[threadIdx.x][threadIdx.y+1] +
+                Ul[y_idx-1 + size_t(Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y] +
+                Uu[y_idx + size_t(Ny-1)*x_idx]*su[threadIdx.x][threadIdx.y+2]);
         }
     }
 }
@@ -178,7 +177,7 @@ void applyInvTpostU(cublasHandle_t handle,
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, noTranspose, noTranspose,
                   Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
-                  &beta, &u[Ny*x_idx], Nx*Ny)); //u[y_idx + Ny*x_idx + Nx*Ny*src_idx] -= res
+                  &beta, &u[size_t(Ny)*x_idx], Nx*Ny)); //u[y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx] -= res
 }
 
 /* Device code - Apply U Block (Adjoint) */
@@ -198,32 +197,31 @@ void __global__ applyUadj(cuComplex const * __restrict__ SRC,
 	unsigned int const y_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (y_idx < Ny && src_idx < numSources) {
         /* Indexing */
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
         // Regular Entries
-        su[threadIdx.x][threadIdx.y+1] = tmp[y_idx + Ny*src_idx];
+        su[threadIdx.x][threadIdx.y+1] = tmp[y_idx + size_t(Ny)*src_idx];
         // Entries at the Edge of Each Block of Threads
         if ( (threadIdx.y == 0) && (y_idx != 0) )
-            su[threadIdx.x][threadIdx.y] = tmp[y_idx + Ny*src_idx - 1];
+            su[threadIdx.x][threadIdx.y] = tmp[y_idx + size_t(Ny)*src_idx - 1];
         else if ( (threadIdx.y == blockDim.y-1) && (y_idx != Ny-1) )
-            su[threadIdx.x][threadIdx.y+2] = tmp[y_idx + Ny*src_idx + 1];
+            su[threadIdx.x][threadIdx.y+2] = tmp[y_idx + size_t(Ny)*src_idx + 1];
     }
     __syncthreads();
     if (y_idx < Ny && src_idx < numSources) {
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
+                (cuConjf(Ud[y_idx + size_t(Ny)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Ul[y_idx + size_t(Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y]);
+                (cuConjf(Ud[y_idx + size_t(Ny)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Uu[y_idx-1 + size_t(Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y]);
         } else {
             u[row_idx] = SRC[row_idx] -
-                (cuConjf(Ud[y_idx + Ny*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Uu[y_idx-1 + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y] +
-                cuConjf(Ul[y_idx + (Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
+                (cuConjf(Ud[y_idx + size_t(Ny)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Uu[y_idx-1 + size_t(Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y] +
+                cuConjf(Ul[y_idx + size_t(Ny-1)*(x_idx-1)])*su[threadIdx.x][threadIdx.y+2]);
         }
     }
 }
@@ -243,7 +241,7 @@ void applyInvTpreU(cublasHandle_t handle,
     /* Run cuBLAS GEMM code */
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, conjugateTranspose, noTranspose,
                   Ny, numSources, Ny,
-                  &alpha, invT, Ny, &u[Ny*(x_idx-1)], Nx*Ny,
+                  &alpha, invT, Ny, &u[size_t(Ny)*(x_idx-1)], Nx*Ny,
                   &beta, tmp, Ny));
 }
 
@@ -263,7 +261,7 @@ void __global__ applyLadj(cuComplex const * __restrict__ Ld,
 	unsigned int const y_idx = blockIdx.y * blockDim.y + threadIdx.y;
     if (y_idx < Ny && src_idx < numSources) {
         /* Indexing */
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         // Regular Entries
         su[threadIdx.x][threadIdx.y+1] = u[row_idx + Ny];
         // Entries at the Edge of Each Block of Threads
@@ -274,21 +272,21 @@ void __global__ applyLadj(cuComplex const * __restrict__ Ld,
     }
     __syncthreads();
     if (y_idx < Ny && src_idx < numSources) {
-        unsigned int row_idx = y_idx + Ny*x_idx + Nx*Ny*src_idx;
+        size_t row_idx = y_idx + size_t(Ny)*x_idx + size_t(Nx)*Ny*src_idx;
         /* Tridiagonal Matrix Multiplication */
         if (y_idx == 0) {
-            tmp[y_idx + Ny*src_idx] = u[row_idx] -
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] = u[row_idx] -
+                (cuConjf(Ld[y_idx + size_t(Ny)*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Ll[y_idx + size_t(Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
         } else if (y_idx == Ny-1) {
-            tmp[y_idx + Ny*src_idx] = u[row_idx] -
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y]);
+            tmp[y_idx + size_t(Ny)*src_idx] = u[row_idx] -
+                (cuConjf(Ld[y_idx + size_t(Ny)*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Lu[y_idx-1 + size_t(Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y]);
         } else {
-            tmp[y_idx + Ny*src_idx] = u[row_idx] -
-                (cuConjf(Ld[y_idx + Ny*x_idx])*su[threadIdx.x][threadIdx.y+1] +
-                cuConjf(Lu[y_idx-1 + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y] +
-                cuConjf(Ll[y_idx + (Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
+            tmp[y_idx + size_t(Ny)*src_idx] = u[row_idx] -
+                (cuConjf(Ld[y_idx + size_t(Ny)*x_idx])*su[threadIdx.x][threadIdx.y+1] +
+                cuConjf(Lu[y_idx-1 + size_t(Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y] +
+                cuConjf(Ll[y_idx + size_t(Ny-1)*x_idx])*su[threadIdx.x][threadIdx.y+2]);
         }
     }
 }
@@ -309,13 +307,12 @@ void applyInvTpostLadj(cublasHandle_t handle,
     USCT_CUBLAS_CHECK(cublasCgemm3m(handle, conjugateTranspose, noTranspose,
                   Ny, numSources, Ny,
                   &alpha, invT, Ny, tmp, Ny,
-                  &beta, &u[Ny*x_idx], Nx*Ny));
+                  &beta, &u[size_t(Ny)*x_idx], Nx*Ny));
 }
 
 /*
  * Host code
  */
-#ifndef USCT_FACTORS_BACKEND
 void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
     WustMexResources resources;
@@ -494,7 +491,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
         /* Forward propagation on grid */
         for (int x_idx = 1; x_idx < Nx; x_idx++) {
             // Apply Block LU to Propagate Forward on Grid
-            applyInvTpreU(handle, &d_invT[Ny*Ny*(x_idx-1)], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
+            applyInvTpreU(handle, &d_invT[size_t(Ny)*Ny*(x_idx-1)], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
             applyUadj<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ud, d_Ul, d_Uu,
                  d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
@@ -505,7 +502,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
             applyLadj<<<dimGridBP, dimBlockBP>>>(d_Ld, d_Ll, d_Lu,
                  d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
-            applyInvTpostLadj(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
+            applyInvTpostLadj(handle, &d_invT[size_t(Ny)*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
         }
     } else { // Forward Helmholtz Solver
         /* Forward propagation on grid */
@@ -514,7 +511,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
             applyL<<<dimGridBP, dimBlockBP>>>(d_SRC, d_Ld, d_Ll, d_Lu,
                  d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
-            applyInvTpostL(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
+            applyInvTpostL(handle, &d_invT[size_t(Ny)*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
         }
         /* Backward propagation on grid */
         for (int x_idx = Nx-2; x_idx >= 0; x_idx--) {
@@ -522,7 +519,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
             applyU<<<dimGridBP, dimBlockBP>>>(d_Ud, d_Ul, d_Uu,
                  d_u, d_tmp, x_idx, Nx, Ny, num_sources);
             USCT_KERNEL_CHECK();
-            applyInvTpostU(handle, &d_invT[Ny*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
+            applyInvTpostU(handle, &d_invT[size_t(Ny)*Ny*x_idx], d_tmp, d_u, x_idx, Nx, Ny, num_sources);
         }
     }
 
@@ -539,240 +536,7 @@ void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 
     resources.close();
 }
-#else
 
-void __global__ copyPageToTmp(cuComplex const *u, cuComplex *tmp,
-                              int page, int Nx, int Ny, int numSources)
-{
-    unsigned int source = blockIdx.x * blockDim.x + threadIdx.x;
-    unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
-    if (source < static_cast<unsigned int>(numSources) &&
-        row < static_cast<unsigned int>(Ny)) {
-        size_t output = row + static_cast<size_t>(Ny) * source;
-        if (row == 0 || row == static_cast<unsigned int>(Ny - 1)) {
-            tmp[output] = make_cuFloatComplex(0, 0);
-        } else {
-            size_t input = row + static_cast<size_t>(Ny) * page +
-                static_cast<size_t>(Nx) * Ny * source;
-            tmp[output] = u[input];
-        }
-    }
-}
-
-void __global__ zeroTmpBoundary(cuComplex *tmp, int Ny, int numSources)
-{
-    unsigned int source = blockIdx.x * blockDim.x + threadIdx.x;
-    if (source < static_cast<unsigned int>(numSources)) {
-        tmp[static_cast<size_t>(Ny) * source] = make_cuFloatComplex(0, 0);
-        tmp[static_cast<size_t>(Ny) * source + Ny - 1] = make_cuFloatComplex(0, 0);
-    }
-}
-
-void __global__ copyTmpToPage(cuComplex const *tmp, cuComplex *u,
-                              int page, int Nx, int Ny, int numSources)
-{
-    unsigned int source = blockIdx.x * blockDim.x + threadIdx.x;
-    unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
-    if (source < static_cast<unsigned int>(numSources) &&
-        row < static_cast<unsigned int>(Ny)) {
-        size_t output = row + static_cast<size_t>(Ny) * page +
-            static_cast<size_t>(Nx) * Ny * source;
-        if (row == 0 || row == static_cast<unsigned int>(Ny - 1)) {
-            u[output] = make_cuFloatComplex(0, 0);
-        } else {
-            u[output] = tmp[row + static_cast<size_t>(Ny) * source];
-        }
-    }
-}
-
-void __global__ subtractTmpFromPage(cuComplex const *tmp, cuComplex *u,
-                                    int page, int Nx, int Ny, int numSources)
-{
-    unsigned int source = blockIdx.x * blockDim.x + threadIdx.x;
-    unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
-    if (source < static_cast<unsigned int>(numSources) &&
-        row < static_cast<unsigned int>(Ny) && row > 0 &&
-        row < static_cast<unsigned int>(Ny - 1)) {
-        size_t output = row + static_cast<size_t>(Ny) * page +
-            static_cast<size_t>(Nx) * Ny * source;
-        u[output] = cuCsubf(u[output],
-            tmp[row + static_cast<size_t>(Ny) * source]);
-    }
-}
-
-inline void solveFactorBlock(cusolverDnHandle_t handle,
-                             cublasOperation_t operation,
-                             cuComplex const *factorPage,
-                             int const *pivotPage,
-                             cuComplex *rhs, int *info,
-                             int Ny, int numSources)
-{
-    int interior = Ny - 2;
-    USCT_CUSOLVER_CHECK(cusolverDnCgetrs(handle, operation,
-        interior, numSources, factorPage + Ny + 1, Ny, pivotPage,
-        rhs + 1, Ny, info));
-}
-
-void runMex(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
-{
-    WustMexResources resources;
-    mxInitGPU();
-    if (nlhs != 1) {
-        wustFail("WUST:InvalidOutput",
-            "applyBlockLUFactors requires one output.");
-    }
-    if (nrhs != 10 || !mxIsLogicalScalar(prhs[9])) {
-        wustFail("WUST:InvalidInput",
-            "Expected eight complex single gpuArrays, int32 pivots, and an adjoint logical.");
-    }
-    for (int input = 0; input < 9; ++input) {
-        if (!mxIsGPUArray(prhs[input])) {
-            wustFail("WUST:InvalidInput",
-                "Inputs one through nine must be gpuArray values.");
-        }
-    }
-
-    mxGPUArray const *SRC = resources.input(prhs[0]);
-    mxGPUArray const *Ld = resources.input(prhs[1]);
-    mxGPUArray const *Ll = resources.input(prhs[2]);
-    mxGPUArray const *Lu = resources.input(prhs[3]);
-    mxGPUArray const *Ud = resources.input(prhs[4]);
-    mxGPUArray const *Ul = resources.input(prhs[5]);
-    mxGPUArray const *Uu = resources.input(prhs[6]);
-    mxGPUArray const *luFactors = resources.input(prhs[7]);
-    mxGPUArray const *pivots = resources.input(prhs[8]);
-    bool adjoint = static_cast<bool>(*mxGetLogicals(prhs[9]));
-
-    int Ny = static_cast<int>(mxGPUGetDimensions(SRC)[0]);
-    int Nx = static_cast<int>(mxGPUGetDimensions(SRC)[1]);
-    int numSources = static_cast<int>(mxGPUGetNumberOfElements(SRC) /
-        (static_cast<size_t>(Nx) * Ny));
-    int interior = Ny - 2;
-    if (Nx < 3 || Ny < 3 || numSources < 1) {
-        wustFail("WUST:InvalidGrid",
-            "Invalid grid or empty RHS batch.");
-    }
-    if (mxGPUGetDimensions(Ld)[0] != Ny || mxGPUGetDimensions(Ld)[1] != Nx-1 ||
-        mxGPUGetDimensions(Ll)[0] != Ny-1 || mxGPUGetDimensions(Ll)[1] != Nx-1 ||
-        mxGPUGetDimensions(Lu)[0] != Ny-1 || mxGPUGetDimensions(Lu)[1] != Nx-1 ||
-        mxGPUGetDimensions(Ud)[0] != Ny || mxGPUGetDimensions(Ud)[1] != Nx-1 ||
-        mxGPUGetDimensions(Ul)[0] != Ny-1 || mxGPUGetDimensions(Ul)[1] != Nx-1 ||
-        mxGPUGetDimensions(Uu)[0] != Ny-1 || mxGPUGetDimensions(Uu)[1] != Nx-1 ||
-        mxGPUGetNumberOfDimensions(luFactors) != 3 ||
-        mxGPUGetDimensions(luFactors)[0] != Ny ||
-        mxGPUGetDimensions(luFactors)[1] != Ny ||
-        mxGPUGetDimensions(luFactors)[2] != Nx ||
-        mxGPUGetDimensions(pivots)[0] != interior ||
-        mxGPUGetDimensions(pivots)[1] != Nx) {
-        wustFail("WUST:InvalidDimensions",
-            "RHS, block arrays, LU factors, and pivots have inconsistent dimensions.");
-    }
-    mxGPUArray const *singleInputs[] = {SRC,Ld,Ll,Lu,Ud,Ul,Uu,luFactors};
-    for (int input = 0; input < 8; ++input) {
-        if (mxGPUGetClassID(singleInputs[input]) != mxSINGLE_CLASS ||
-            mxGPUGetComplexity(singleInputs[input]) != mxCOMPLEX) {
-            wustFail("WUST:InvalidType",
-                "RHS, block arrays, and LU factors must be complex single gpuArrays.");
-        }
-    }
-    if (mxGPUGetClassID(pivots) != mxINT32_CLASS ||
-        mxGPUGetComplexity(pivots) != mxREAL) {
-        wustFail("WUST:InvalidType",
-            "Pivots must be a real int32 gpuArray.");
-    }
-
-    cuComplex const *d_SRC = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(SRC));
-    cuComplex const *d_Ld = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Ld));
-    cuComplex const *d_Ll = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Ll));
-    cuComplex const *d_Lu = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Lu));
-    cuComplex const *d_Ud = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Ud));
-    cuComplex const *d_Ul = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Ul));
-    cuComplex const *d_Uu = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(Uu));
-    cuComplex const *d_factors = reinterpret_cast<cuComplex const *>(mxGPUGetDataReadOnly(luFactors));
-    int const *d_pivots = reinterpret_cast<int const *>(mxGPUGetDataReadOnly(pivots));
-
-    mxGPUArray *u = resources.array(mxGPUGetNumberOfDimensions(SRC),
-        mxGPUGetDimensions(SRC), mxSINGLE_CLASS, mxCOMPLEX,
-        MX_GPU_INITIALIZE_VALUES);
-    cuComplex *d_u = reinterpret_cast<cuComplex *>(mxGPUGetData(u));
-    mwSize tmpDims[2] = {static_cast<mwSize>(Ny), static_cast<mwSize>(numSources)};
-    mxGPUArray *tmp = resources.array(2, tmpDims, mxSINGLE_CLASS,
-        mxCOMPLEX, MX_GPU_DO_NOT_INITIALIZE);
-    cuComplex *d_tmp = reinterpret_cast<cuComplex *>(mxGPUGetData(tmp));
-    mwSize infoElements = static_cast<mwSize>(Nx);
-    mxGPUArray *info = resources.array(1, &infoElements,
-        mxINT32_CLASS, mxREAL, MX_GPU_INITIALIZE_VALUES);
-    int *d_info = reinterpret_cast<int *>(mxGPUGetData(info));
-
-    dim3 block(threadsPerBlock1D, threadsPerBlock1D, 1);
-    dim3 grid((numSources + block.x - 1) / block.x,
-              (Ny + block.y - 1) / block.y, 1);
-    dim3 sourceBlock(256, 1, 1);
-    dim3 sourceGrid((numSources + sourceBlock.x - 1) / sourceBlock.x, 1, 1);
-    cusolverDnHandle_t handle;
-    USCT_CUSOLVER_CHECK(resources.create(&handle));
-
-    if (adjoint) {
-        for (int x = 1; x < Nx; ++x) {
-            copyPageToTmp<<<grid, block>>>(d_u, d_tmp, x - 1, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            solveFactorBlock(handle, CUBLAS_OP_C,
-                &d_factors[static_cast<size_t>(Ny) * Ny * (x - 1)],
-                &d_pivots[interior * (x - 1)], d_tmp, &d_info[x - 1],
-                Ny, numSources);
-            applyUadj<<<grid, block>>>(d_SRC, d_Ud, d_Ul, d_Uu,
-                d_u, d_tmp, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-        }
-        for (int x = Nx - 2; x >= 0; --x) {
-            applyLadj<<<grid, block>>>(d_Ld, d_Ll, d_Lu,
-                d_u, d_tmp, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            zeroTmpBoundary<<<sourceGrid, sourceBlock>>>(d_tmp, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            solveFactorBlock(handle, CUBLAS_OP_C,
-                &d_factors[static_cast<size_t>(Ny) * Ny * x],
-                &d_pivots[interior * x], d_tmp, &d_info[x], Ny, numSources);
-            copyTmpToPage<<<grid, block>>>(d_tmp, d_u, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-        }
-    } else {
-        for (int x = 1; x < Nx; ++x) {
-            applyL<<<grid, block>>>(d_SRC, d_Ld, d_Ll, d_Lu,
-                d_u, d_tmp, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            zeroTmpBoundary<<<sourceGrid, sourceBlock>>>(d_tmp, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            solveFactorBlock(handle, CUBLAS_OP_N,
-                &d_factors[static_cast<size_t>(Ny) * Ny * x],
-                &d_pivots[interior * x], d_tmp, &d_info[x], Ny, numSources);
-            copyTmpToPage<<<grid, block>>>(d_tmp, d_u, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-        }
-        for (int x = Nx - 2; x >= 0; --x) {
-            applyU<<<grid, block>>>(d_Ud, d_Ul, d_Uu,
-                d_u, d_tmp, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            zeroTmpBoundary<<<sourceGrid, sourceBlock>>>(d_tmp, Ny, numSources);
-            USCT_KERNEL_CHECK();
-            solveFactorBlock(handle, CUBLAS_OP_N,
-                &d_factors[static_cast<size_t>(Ny) * Ny * x],
-                &d_pivots[interior * x], d_tmp, &d_info[x], Ny, numSources);
-            subtractTmpFromPage<<<grid, block>>>(d_tmp, d_u, x, Nx, Ny, numSources);
-            USCT_KERNEL_CHECK();
-        }
-    }
-    usctCheckDeviceInfo(d_info, Nx, "apply getrs");
-
-    plhs[0] = mxGPUCreateMxArrayOnGPU(u);
-
-    for (int input = 0; input < 8; ++input) {
-
-    }
-
-    resources.close();
-}
-#endif
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {

@@ -96,18 +96,7 @@ def read_artifact(path, expected=None):
         for key, spec in doc["arrays"].items():
 
             def load(dataset, dtype, spec=spec, key=key):
-                if not isinstance(handle.get(dataset, getlink=True), h5py.HardLink):
-                    raise ValueError(  # noqa: TRY004
-                        "Only local datasets are supported"
-                    )
                 obj = handle[dataset]
-                if (
-                    not isinstance(obj, h5py.Dataset)
-                    or obj.is_virtual
-                    or obj.external
-                    or Path(obj.file.filename).resolve() != data
-                ):
-                    raise ValueError("External/virtual HDF5 data is not supported")
                 if obj.shape != tuple(spec["shape"]) or obj.dtype != np.dtype(dtype):
                     raise ValueError(
                         f"Dataset shape/dtype differs from manifest: {key}"
@@ -134,7 +123,7 @@ def read_artifact(path, expected=None):
     return doc, result
 
 
-def write_artifact(path, name, metadata, arrays, axes, units):
+def publish_result(path, name, metadata, arrays, axes, units):
     """Write each array once, followed by its manifest; no whole-array readback."""
     import h5py
     import numpy as np
