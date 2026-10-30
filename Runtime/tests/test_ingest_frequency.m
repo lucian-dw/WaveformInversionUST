@@ -97,6 +97,10 @@ function test_ingest_frequency
                  'c_geom_mps', 1500, 'phase_correction', 'none', 'mask', true(2, 4), ...
                  'data_units', 'instrument_units', 'measurement_provenance', 'fixture');
     a = wust_prepare(rf, cfg);
+    assert(~isfield(a.preparation, 'rf_config'));
+    assert(~isfield(a.preparation, 'mask'));
+    assert(a.preparation.valid_mask_elements == nnz(a.mask));
+    assert(a.preparation.sampling_interval_s == rf.time_s(2) - rf.time_s(1));
     direct = input;
     direct.fourier_sign = -1;
     direct.frequencies_hz = cfg.frequencies_hz;

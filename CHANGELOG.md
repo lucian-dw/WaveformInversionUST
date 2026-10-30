@@ -1,5 +1,12 @@
 # Refactor changelog
 
+## Post-review C04
+
+RF preparation records phase policy, geometry reference speed when used,
+sampling interval and mask shape/count, not the entire RF configuration.
+The full mask remains an HDF5 observation array. The A100 MATLAB ingestion/RF
+equivalence test passed with the compact metadata assertions (exit 0).
+
 - Protocol **2** uses JSON field descriptions and HDF5 arrays. Field definitions
   are maintained once and exported to seven schemas. Arrays precede successful
   manifest publication; source/build hashes and dirty-tree admission are removed.

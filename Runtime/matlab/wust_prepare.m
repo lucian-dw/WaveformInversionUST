@@ -53,7 +53,12 @@ function obs = wust_prepare(rf, cfg)
         obs.Y = obs.Y .* exp(-2i * pi * delay_s .* reshape(obs.frequencies_hz, 1, 1, []));
         obs.frequency_data_norm = reshape(sum(sum(abs(double(obs.Y)).^2, 1), 2), [], 1);
     end
-    obs.preparation.rf_config = cfg;
+    obs.preparation.sampling_interval_s = dt;
+    obs.preparation.mask_shape = size(mask);
+    obs.preparation.valid_mask_elements = nnz(mask);
+    if strcmp(cfg.phase_correction, 'homogeneous-tof')
+        obs.preparation.geometry_reference_speed_mps = cfg.c_geom_mps;
+    end
     obs.preparation.phase_correction = cfg.phase_correction;
     obs.saved_dt_s = dt;
     if isfield(rf, 'simulation')
